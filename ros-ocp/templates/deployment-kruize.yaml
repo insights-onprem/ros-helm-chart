@@ -21,6 +21,7 @@ spec:
         app.kubernetes.io/component: optimization
         app.kubernetes.io/name: kruize
     spec:
+      serviceAccountName: kruize
       {{- with .Values.global.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}

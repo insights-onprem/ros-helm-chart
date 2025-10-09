@@ -1,0 +1,26 @@
+{{/* Create ClusterRole for kruize service account */}}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "ros-ocp.fullname" . }}-kruize
+  labels:
+    {{- include "ros-ocp.labels" . | nindent 4 }}
+    app.kubernetes.io/component: rbac
+rules:
+  # CONFIRMED NECESSARY PERMISSIONS
+  # Core resources for workload monitoring and optimization
+  - apiGroups: [""]
+    resources: ["pods", "services", "configmaps", "secrets", "nodes", "endpoints"]
+    verbs: ["get", "list", "watch"]
+  # Workload resources
+  - apiGroups: ["apps"]
+    resources: ["deployments", "replicasets", "statefulsets", "daemonsets"]
+    verbs: ["get", "list", "watch"]
+  # Metrics API resources
+  - apiGroups: ["metrics.k8s.io"]
+    resources: ["nodes", "pods"]
+    verbs: ["get", "list"]
+  # Custom metrics API resources
+  - apiGroups: ["custom.metrics.k8s.io"]
+    resources: ["*"]
+    verbs: ["get", "list"]
