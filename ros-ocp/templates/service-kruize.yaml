@@ -10,10 +10,24 @@ metadata:
 spec:
   type: {{ .Values.service.type }}
   ports:
+    {{- if eq (include "ros-ocp.jwt.shouldEnable" .) "true" }}
+    # When JWT auth is enabled, expose Envoy proxy port for external traffic
+    - port: {{ .Values.kruize.port }}
+      targetPort: http-proxy  # Route to Envoy sidecar
+      protocol: TCP
+      name: http
+    # Also expose Envoy admin port for debugging (internal use)
+    - port: {{ .Values.jwt_auth.envoy.adminPort }}
+      targetPort: admin
+      protocol: TCP
+      name: envoy-admin
+    {{- else }}
+    # When JWT auth is disabled, expose Kruize directly
     - port: {{ .Values.kruize.port }}
       targetPort: http
       protocol: TCP
       name: http
+    {{- end }}
   selector:
     {{- include "ros-ocp.selectorLabels" . | nindent 4 }}
     app.kubernetes.io/component: optimization

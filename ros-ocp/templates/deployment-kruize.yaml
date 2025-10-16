@@ -100,12 +100,55 @@ spec:
             {{- toYaml .Values.kruize.partitions.resources | nindent 12 }}
         {{- end }}
       containers:
+        {{- if eq (include "ros-ocp.jwt.shouldEnable" .) "true" }}
+        # Envoy sidecar for native JWT authentication
+        - name: envoy-proxy
+          image: "{{ .Values.jwt_auth.envoy.image.repository }}:{{ .Values.jwt_auth.envoy.image.tag }}"
+          imagePullPolicy: {{ .Values.global.pullPolicy }}
+          ports:
+            - name: http-proxy
+              containerPort: {{ .Values.jwt_auth.envoy.port }}
+              protocol: TCP
+            - name: admin
+              containerPort: {{ .Values.jwt_auth.envoy.adminPort }}
+              protocol: TCP
+          command:
+            - /usr/local/bin/envoy
+          args:
+            - -c
+            - /etc/envoy/envoy.yaml
+            - --log-level
+            - {{ .Values.jwt_auth.envoy.logLevel | default "info" }}
+          volumeMounts:
+            - name: envoy-config
+              mountPath: /etc/envoy
+              readOnly: true
+          livenessProbe:
+            httpGet:
+              path: /ready
+              port: {{ .Values.jwt_auth.envoy.adminPort }}
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: {{ .Values.jwt_auth.envoy.adminPort }}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            limits:
+              cpu: 500m
+              memory: 256Mi
+            requests:
+              cpu: 100m
+              memory: 128Mi
+        {{- end }}
         - name: kruize
           image: "{{ .Values.kruize.image.repository }}:{{ .Values.kruize.image.tag }}"
           imagePullPolicy: {{ .Values.global.pullPolicy }}
           ports:
-            - name: http
-              containerPort: {{ .Values.kruize.port }}
+            - name: {{- if eq (include "ros-ocp.jwt.shouldEnable" .) "true" }} http-kruize {{- else }} http {{- end }}
+              containerPort: {{- if eq (include "ros-ocp.jwt.shouldEnable" .) "true" }} 8081 {{- else }} {{ .Values.kruize.port }} {{- end }}
               protocol: TCP
           env:
             - name: LOGGING_LEVEL
@@ -164,7 +207,7 @@ spec:
           livenessProbe:
             httpGet:
               path: /listPerformanceProfiles
-              port: {{ .Values.kruize.port }}
+              port: {{- if eq (include "ros-ocp.jwt.shouldEnable" .) "true" }} 8081 {{- else }} {{ .Values.kruize.port }} {{- end }}
             initialDelaySeconds: 60
             periodSeconds: {{ .Values.probes.periodSeconds }}
             timeoutSeconds: {{ .Values.probes.timeoutSeconds }}
@@ -172,7 +215,7 @@ spec:
           readinessProbe:
             httpGet:
               path: /listPerformanceProfiles
-              port: {{ .Values.kruize.port }}
+              port: {{- if eq (include "ros-ocp.jwt.shouldEnable" .) "true" }} 8081 {{- else }} {{ .Values.kruize.port }} {{- end }}
             initialDelaySeconds: 30
             periodSeconds: {{ .Values.probes.periodSeconds }}
             timeoutSeconds: {{ .Values.probes.timeoutSeconds }}
@@ -180,6 +223,15 @@ spec:
           resources:
             {{- toYaml .Values.resources.kruize | nindent 12 }}
       volumes:
+        {{- if eq (include "ros-ocp.jwt.shouldEnable" .) "true" }}
+        # Envoy configuration volume
+        - name: envoy-config
+          configMap:
+            name: {{ include "ros-ocp.fullname" . }}-envoy-config
+            items:
+              - key: envoy.yaml
+                path: envoy.yaml
+        {{- end }}
         - name: kruize-config
           configMap:
             name: {{ include "ros-ocp.fullname" . }}-kruize-config

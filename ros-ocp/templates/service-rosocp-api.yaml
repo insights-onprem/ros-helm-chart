@@ -10,10 +10,24 @@ metadata:
 spec:
   type: {{ .Values.service.type }}
   ports:
+    {{- if eq (include "ros-ocp.jwt.shouldEnable" .) "true" }}
+    # When JWT auth is enabled, expose Envoy proxy port for external traffic
+    - port: {{ .Values.rosocp.api.port }}
+      targetPort: http-proxy  # Route to Envoy sidecar
+      protocol: TCP
+      name: http
+    # Also expose Envoy admin port for debugging (internal use)
+    - port: {{ .Values.jwt_auth.envoy.adminPort }}
+      targetPort: admin
+      protocol: TCP
+      name: envoy-admin
+    {{- else }}
+    # When JWT auth is disabled, expose API directly
     - port: {{ .Values.rosocp.api.port }}
       targetPort: http
       protocol: TCP
       name: http
+    {{- end }}
     - port: {{ .Values.rosocp.api.metricsPort }}
       targetPort: metrics
       protocol: TCP

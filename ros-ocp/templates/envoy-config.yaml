@@ -73,11 +73,36 @@ data:
                   - match:
                       prefix: "/ready"
 
-              # Lua filter to extract JWT claims and inject X-ROS headers
+              # Lua filter to extract JWT claims and inject X-Rh-Identity header
               - name: envoy.filters.http.lua
                 typed_config:
                   "@type": type.googleapis.com/envoy.extensions.filters.http.lua.v3.Lua
                   inline_code: |
+                    -- Helper function to get claim value with fallbacks
+                    local function get_claim(payload, ...)
+                      for _, key in ipairs({...}) do
+                        if payload[key] ~= nil and payload[key] ~= "" then
+                          return tostring(payload[key])
+                        end
+                      end
+                      return ""
+                    end
+
+                    -- Helper function to build JSON manually (no json lib in Envoy Lua)
+                    local function build_xrhid_json(org_id, account_number, user_type)
+                      -- Escape any quotes in values
+                      local function escape_json(str)
+                        return string.gsub(str, '"', '\\"')
+                      end
+
+                      org_id = escape_json(org_id)
+                      account_number = escape_json(account_number)
+                      user_type = escape_json(user_type)
+
+                      return string.format('{"identity":{"org_id":"%s","account_number":"%s","type":"%s"}}',
+                                          org_id, account_number, user_type)
+                    end
+
                     function envoy_on_request(request_handle)
                       -- Get JWT payload from dynamic metadata (set by jwt_authn filter)
                       local metadata = request_handle:streamInfo():dynamicMetadata()
@@ -87,36 +112,37 @@ data:
                         local payload = jwt_data["jwt_payload"]
 
                         if payload ~= nil then
-                          -- Set authentication headers that backend expects
-                          request_handle:headers():add("X-ROS-Authenticated", "true")
-                          request_handle:headers():add("X-ROS-Auth-Method", "Envoy-Native-JWT")
+                          -- Extract org_id with fallback to alternative claim names
+                          local org_id = get_claim(payload, "org_id", "organization_id", "tenant_id")
 
-                          -- Extract user ID (sub claim)
-                          if payload["sub"] ~= nil then
-                            request_handle:headers():add("X-ROS-User-ID", tostring(payload["sub"]))
+                          -- Extract account_number with fallback to alternative claim names
+                          local account_number = get_claim(payload, "account_number", "account_id", "account")
+
+                          -- Use default values if not present
+                          if org_id == "" then
+                            org_id = "1"
+                            request_handle:logWarn("JWT missing org_id claim, using default: 1")
                           end
 
-                          -- Extract username (preferred_username claim)
-                          if payload["preferred_username"] ~= nil then
-                            request_handle:headers():add("X-ROS-User-Name", tostring(payload["preferred_username"]))
+                          if account_number == "" then
+                            account_number = org_id  -- Default to org_id
                           end
 
-                          -- Extract client ID (azp or client_id claim)
-                          if payload["azp"] ~= nil then
-                            request_handle:headers():add("X-Client-ID", tostring(payload["azp"]))
-                          elseif payload["client_id"] ~= nil then
-                            request_handle:headers():add("X-Client-ID", tostring(payload["client_id"]))
-                          end
+                          -- Build XRHID JSON structure
+                          local xrhid_json = build_xrhid_json(org_id, account_number, "User")
 
-                          -- Forward the bearer token (strip "Bearer " prefix)
-                          local auth_header = request_handle:headers():get("authorization")
-                          if auth_header ~= nil then
-                            local token = string.gsub(auth_header, "^Bearer ", "")
-                            request_handle:headers():add("X-Bearer-Token", token)
-                          end
+                          -- Base64 encode the XRHID JSON
+                          local xrhid_base64 = request_handle:base64Escape(xrhid_json)
+
+                          -- Inject X-Rh-Identity header (RHSSO format expected by ros-ocp-backend)
+                          request_handle:headers():add("X-Rh-Identity", xrhid_base64)
+
+                          -- Extract user info for logging only
+                          local username = get_claim(payload, "preferred_username", "sub")
 
                           -- Log authentication for debugging
-                          request_handle:logInfo("JWT authenticated: " .. tostring(payload["sub"]))
+                          request_handle:logInfo(string.format("JWT authenticated: user=%s, org_id=%s, account=%s",
+                                                               username, org_id, account_number))
                         end
                       end
                     end

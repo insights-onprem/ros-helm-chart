@@ -52,6 +52,49 @@ spec:
               echo "Kafka is ready"
               echo "Kafka is ready"
       containers:
+        {{- if eq (include "ros-ocp.jwt.shouldEnable" .) "true" }}
+        # Envoy sidecar for native JWT authentication
+        - name: envoy-proxy
+          image: "{{ .Values.jwt_auth.envoy.image.repository }}:{{ .Values.jwt_auth.envoy.image.tag }}"
+          imagePullPolicy: {{ .Values.global.pullPolicy }}
+          ports:
+            - name: http-proxy
+              containerPort: {{ .Values.jwt_auth.envoy.port }}
+              protocol: TCP
+            - name: admin
+              containerPort: {{ .Values.jwt_auth.envoy.adminPort }}
+              protocol: TCP
+          command:
+            - /usr/local/bin/envoy
+          args:
+            - -c
+            - /etc/envoy/envoy.yaml
+            - --log-level
+            - {{ .Values.jwt_auth.envoy.logLevel | default "info" }}
+          volumeMounts:
+            - name: envoy-config
+              mountPath: /etc/envoy
+              readOnly: true
+          livenessProbe:
+            httpGet:
+              path: /ready
+              port: {{ .Values.jwt_auth.envoy.adminPort }}
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: {{ .Values.jwt_auth.envoy.adminPort }}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            limits:
+              cpu: 500m
+              memory: 256Mi
+            requests:
+              cpu: 100m
+              memory: 128Mi
+        {{- end }}
         - name: rosocp-api
           image: "{{ .Values.rosocp.api.image.repository }}:{{ .Values.rosocp.api.image.tag }}"
           imagePullPolicy: {{ .Values.rosocp.api.image.pullPolicy | default .Values.global.pullPolicy }}
@@ -61,8 +104,8 @@ spec:
               ./rosocp db migrate up
               ./rosocp start api
           ports:
-            - name: http
-              containerPort: {{ .Values.rosocp.api.port }}
+            - name: {{- if eq (include "ros-ocp.jwt.shouldEnable" .) "true" }} http-api {{- else }} http {{- end }}
+              containerPort: {{- if eq (include "ros-ocp.jwt.shouldEnable" .) "true" }} 8081 {{- else }} {{ .Values.rosocp.api.port }} {{- end }}
               protocol: TCP
             - name: metrics
               containerPort: {{ .Values.rosocp.api.metricsPort }}
@@ -104,7 +147,7 @@ spec:
           livenessProbe:
             httpGet:
               path: /status
-              port: {{ .Values.rosocp.api.port }}
+              port: {{- if eq (include "ros-ocp.jwt.shouldEnable" .) "true" }} 8081 {{- else }} {{ .Values.rosocp.api.port }} {{- end }}
             initialDelaySeconds: {{ .Values.probes.initialDelaySeconds }}
             periodSeconds: {{ .Values.probes.periodSeconds }}
             timeoutSeconds: {{ .Values.probes.timeoutSeconds }}
@@ -112,10 +155,20 @@ spec:
           readinessProbe:
             httpGet:
               path: /status
-              port: {{ .Values.rosocp.api.port }}
+              port: {{- if eq (include "ros-ocp.jwt.shouldEnable" .) "true" }} 8081 {{- else }} {{ .Values.rosocp.api.port }} {{- end }}
             initialDelaySeconds: 15
             periodSeconds: {{ .Values.probes.periodSeconds }}
             timeoutSeconds: {{ .Values.probes.timeoutSeconds }}
             failureThreshold: {{ .Values.probes.failureThreshold }}
           resources:
             {{- toYaml .Values.resources.application | nindent 12 }}
+      volumes:
+        {{- if eq (include "ros-ocp.jwt.shouldEnable" .) "true" }}
+        # Envoy configuration volume
+        - name: envoy-config
+          configMap:
+            name: {{ include "ros-ocp.fullname" . }}-envoy-config
+            items:
+              - key: envoy.yaml
+                path: envoy.yaml
+        {{- end }}
