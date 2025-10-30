@@ -345,14 +345,6 @@ kubectl get pods -n kafka -l name=strimzi-cluster-operator
 
 **Problem**: UI not accessible, OAuth redirect loop, or "Session expired" errors.
 
-> **📖 See [UI OAuth Authentication Guide](ui-oauth-authentication.md) for comprehensive documentation including:**
-> - Complete authentication flow diagrams
-> - Detailed troubleshooting procedures
-> - Testing and validation steps
-> - Security considerations
->
-> **Quick reference**: [UI Authentication Flow diagrams](configuration.md#ui-authentication-flow)
-
 #### UI Pod Not Running
 
 **Check pod status:**
