@@ -2,7 +2,7 @@
 
 ## Overview
 
-The ROS OCP UI uses OpenShift's native OAuth proxy as a sidecar container to provide authentication. This allows users to authenticate using their OpenShift credentials without requiring additional identity providers.
+The UI for ROS OCP uses OpenShift's native OAuth proxy as a sidecar container to provide authentication. This allows users to authenticate using their OpenShift credentials without requiring additional identity providers.
 
 ### Quick Reference
 
