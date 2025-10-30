@@ -188,7 +188,7 @@ ui:
         memory: "64Mi"
   app:
     image:
-      repository: quay.io/cloudservices/ui
+      repository: openshift/hello-openshift
       tag: "latest"
       pullPolicy: IfNotPresent
     port: 8080

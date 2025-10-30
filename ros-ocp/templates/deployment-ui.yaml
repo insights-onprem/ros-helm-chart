@@ -29,8 +29,8 @@ spec:
       {{- end }}
       containers:
       - name: oauth-proxy
-        image: "{{ .Values.ui.oauth-proxy.image.repository }}:{{ .Values.ui.oauth-proxy.image.tag }}"
-        imagePullPolicy: {{ .Values.ui.oauth-proxy.image.pullPolicy }}
+        image: "{{ .Values.ui.oauthProxy.image.repository }}:{{ .Values.ui.oauthProxy.image.tag }}"
+        imagePullPolicy: {{ .Values.ui.oauthProxy.image.pullPolicy }}
         ports:
         - name: https
           containerPort: 8443
@@ -60,7 +60,7 @@ spec:
           initialDelaySeconds: 5
           periodSeconds: 5
         resources:
-          {{- toYaml .Values.ui.oauth-proxy.resources | nindent 10 }}
+          {{- toYaml .Values.ui.oauthProxy.resources | nindent 10 }}
         volumeMounts:
         - name: proxy-tls
           mountPath: /etc/tls/private

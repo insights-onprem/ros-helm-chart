@@ -468,7 +468,7 @@ jwt_auth:
 ui:
   replicaCount: 1
 
-  oauth-proxy:
+  oauthProxy:
     image:
       repository: quay.io/openshift/origin-oauth-proxy
       pullPolicy: IfNotPresent
