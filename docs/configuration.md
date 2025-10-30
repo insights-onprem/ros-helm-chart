@@ -433,7 +433,122 @@ ingress:
   logging:
     level: "info"
     format: "json"
+
+# UI (OpenShift only - OAuth protected frontend)
+ui:
+  replicaCount: 1
+  oauth-proxy:
+    image:
+      repository: quay.io/openshift/origin-oauth-proxy
+      pullPolicy: IfNotPresent
+      tag: "latest"
+    resources:
+      limits:
+        cpu: "100m"
+        memory: "128Mi"
+      requests:
+        cpu: "50m"
+        memory: "64Mi"
+  app:
+    image:
+      repository: quay.io/cloudservices/ui
+      tag: "latest"
+      pullPolicy: IfNotPresent
+    port: 8080
+    resources:
+      limits:
+        cpu: "100m"
+        memory: "128Mi"
+      requests:
+        cpu: "50m"
+        memory: "64Mi"
 ```
+
+**UI Notes:**
+- **OpenShift Only**: UI is automatically deployed only on OpenShift clusters (via `isOpenShift` check)
+- **OAuth Protection**: Uses OpenShift OAuth proxy sidecar for authentication
+- **Session Persistence**: Cookie secret is preserved across Helm upgrades to maintain user sessions
+- **Sidecar Pattern**: OAuth proxy and UI app run in the same pod, communicating over `localhost:8080`
+- **Auto-TLS**: TLS certificates are automatically managed by OpenShift Service CA
+- **Access**: Users are redirected to OpenShift login if not authenticated
+
+**UI Authentication Flow:**
+
+The UI uses OpenShift OAuth for authentication. Here's how the authentication flow works:
+
+> **📖 See [UI OAuth Authentication Guide](ui-oauth-authentication.md) for complete documentation including:**
+> - Detailed architecture diagrams
+> - Component descriptions
+> - Configuration reference
+> - Testing procedures
+> - Comprehensive troubleshooting
+> - Security considerations
+
+**First Request (Full OAuth Flow):**
+```mermaid
+graph TB
+    Browser[Browser]
+    Route[OpenShift Route]
+    
+    subgraph Pod[Pod]
+        direction TB
+        Proxy[OAuth Proxy]
+        App[App Container]
+    end
+    
+    OAuth[OpenShift OAuth Server]
+    
+    Browser -->|① Request| Route
+    Route --> Proxy
+    Proxy -.->|② Redirect| Browser
+    Browser -->|③ Login| OAuth
+    OAuth -.->|④ Callback| Proxy
+    Proxy -->|⑤ localhost| App
+    App -->|⑥ Response| Proxy
+    Proxy -->|⑦ Response| Browser
+
+    style Pod fill:#fff9c4,stroke:#333,stroke-width:2px
+    style Proxy fill:#90caf9,stroke:#333,stroke-width:2px
+    style App fill:#a5d6a7,stroke:#333,stroke-width:2px
+    style OAuth fill:#f48fb1,stroke:#333,stroke-width:2px
+    style Browser fill:#e1bee7,stroke:#333,stroke-width:2px
+    style Route fill:#ffcc80,stroke:#333,stroke-width:2px
+```
+
+1. User requests UI via OpenShift Route
+2. OAuth proxy detects no valid session, redirects to OpenShift OAuth
+3. User authenticates with OpenShift credentials
+4. OAuth server redirects back to OAuth proxy with token
+5. Proxy validates token, creates session cookie
+6. Proxy forwards request to UI app container via `localhost`
+7. Response flows back through proxy to user's browser
+
+**Authenticated Requests (With Session Cookie):**
+```mermaid
+graph TB
+    Browser2[Browser with cookie]
+    Route2[Route]
+    
+    subgraph Pod2[Pod]
+        direction TB
+        Proxy2[OAuth Proxy]
+        App2[App]
+    end
+    
+    Browser2 --> Route2
+    Route2 --> Proxy2
+    Proxy2 -->|localhost| App2
+    App2 --> Proxy2
+    Proxy2 --> Browser2
+
+    style Pod2 fill:#fff9c4,stroke:#333,stroke-width:2px
+    style Proxy2 fill:#90caf9,stroke:#333,stroke-width:2px
+    style App2 fill:#a5d6a7,stroke:#333,stroke-width:2px
+    style Browser2 fill:#e1bee7,stroke:#333,stroke-width:2px
+    style Route2 fill:#ffcc80,stroke:#333,stroke-width:2px
+```
+
+For authenticated requests, the OAuth proxy validates the session cookie and directly forwards to the UI app container without redirecting to OpenShift OAuth.
 
 ### Environment-Specific Values Files
 
