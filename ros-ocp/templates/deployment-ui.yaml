@@ -1,0 +1,98 @@
+{{- if eq (include "ros-ocp.isOpenShift" .) "true" }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "ros-ocp.fullname" . }}-ui
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ros-ocp.labels" . | nindent 4 }}
+    app.kubernetes.io/component: ui
+    app.kubernetes.io/name: ui
+spec:
+  replicas: {{ .Values.ui.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "ros-ocp.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: ui
+      app.kubernetes.io/name: ui
+  template:
+    metadata:
+      labels:
+        {{- include "ros-ocp.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: ui
+        app.kubernetes.io/name: ui
+    spec:
+      serviceAccountName: {{ include "ros-ocp.fullname" . }}-ui
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+      - name: oauth-proxy
+        image: "{{ .Values.ui.oauth-proxy.image.repository }}:{{ .Values.ui.oauth-proxy.image.tag }}"
+        imagePullPolicy: {{ .Values.ui.oauth-proxy.image.pullPolicy }}
+        ports:
+        - name: https
+          containerPort: 8443
+        args:
+        - --https-address=:8443
+        - --provider=openshift
+        - --openshift-service-account={{ include "ros-ocp.fullname" . }}-ui
+        - --cookie-secret-file=/etc/proxy/secrets/session-secret
+        - --tls-cert=/etc/tls/private/tls.crt
+        - --tls-key=/etc/tls/private/tls.key
+        - --upstream=http://localhost:{{ .Values.ui.app.port }}
+        - --pass-host-header=false
+        - --skip-provider-button
+        - --skip-auth-preflight
+        livenessProbe:
+          httpGet:
+            path: /oauth/healthz
+            port: https
+            scheme: HTTPS
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /oauth/healthz
+            port: https
+            scheme: HTTPS
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        resources:
+          {{- toYaml .Values.ui.oauth-proxy.resources | nindent 10 }}
+        volumeMounts:
+        - name: proxy-tls
+          mountPath: /etc/tls/private
+          readOnly: true
+        - name: cookie-secret
+          mountPath: /etc/proxy/secrets
+          readOnly: true
+      - name: app
+        image: "{{ .Values.ui.app.image.repository }}:{{ .Values.ui.app.image.tag }}"
+        imagePullPolicy: {{ .Values.ui.app.image.pullPolicy }}
+        ports:
+        - name: http
+          containerPort: {{ .Values.ui.app.port }}
+        livenessProbe:
+          httpGet:
+            path: /
+            port: http
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /
+            port: http
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        resources:
+          {{- toYaml .Values.ui.app.resources | nindent 10 }}
+      volumes:
+      - name: proxy-tls
+        secret:
+          secretName: {{ include "ros-ocp.fullname" . }}-ui-tls
+      - name: cookie-secret
+        secret:
+          secretName: {{ include "ros-ocp.fullname" . }}-ui-cookie-secret
+{{- end }}
