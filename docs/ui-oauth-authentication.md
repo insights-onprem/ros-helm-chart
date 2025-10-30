@@ -132,7 +132,7 @@ sequenceDiagram
 
     Proxy-->>User: 200 OK<br/>HTML content
 
-    Note over User,App: <b>Subsequent Requests (With Session)</b>
+    Note over User,App: Subsequent Requests (With Session)
 
     User->>Route: GET /some-page<br/>Cookie: _oauth_proxy=...
 
@@ -146,7 +146,7 @@ sequenceDiagram
 
     Proxy-->>User: 200 OK<br/>HTML content
 
-    Note over User,App: <b>Session Expired</b>
+    Note over User,App: Session Expired
 
     User->>Route: GET /<br/>Cookie: _oauth_proxy=... (expired)
 
