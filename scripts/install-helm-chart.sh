@@ -636,6 +636,7 @@ show_status() {
         local main_route=$(kubectl get route -n "$NAMESPACE" -o jsonpath='{.items[?(@.spec.path=="/")].spec.host}' 2>/dev/null)
         local ingress_route=$(kubectl get route -n "$NAMESPACE" -o jsonpath='{.items[?(@.spec.path=="/api/ingress")].spec.host}' 2>/dev/null)
         local kruize_route=$(kubectl get route -n "$NAMESPACE" -o jsonpath='{.items[?(@.spec.path=="/api/kruize")].spec.host}' 2>/dev/null)
+        local ui_route=$(kubectl get route -n "$NAMESPACE" -l app.kubernetes.io/component=ui -o jsonpath='{.items[0].spec.host}' 2>/dev/null)
 
         if [ -n "$main_route" ]; then
             echo_info "Access Points (via OpenShift Routes):"
@@ -645,6 +646,9 @@ show_status() {
             fi
             if [ -n "$kruize_route" ]; then
                 echo_info "  - Kruize API: http://$kruize_route/api/kruize/listPerformanceProfiles"
+            fi
+            if [ -n "$ui_route" ]; then
+                echo_info "  - UI: https://$ui_route"
             fi
         else
             echo_warning "Routes not found. Use port-forwarding or check route configuration."
@@ -897,6 +901,7 @@ run_health_checks() {
         local main_route=$(kubectl get route -n "$NAMESPACE" -o jsonpath='{.items[?(@.spec.path=="/")].spec.host}' 2>/dev/null)
         local ingress_route=$(kubectl get route -n "$NAMESPACE" -o jsonpath='{.items[?(@.spec.path=="/api/ingress")].spec.host}' 2>/dev/null)
         local kruize_route=$(kubectl get route -n "$NAMESPACE" -o jsonpath='{.items[?(@.spec.path=="/api/kruize")].spec.host}' 2>/dev/null)
+        local ui_route=$(kubectl get route -n "$NAMESPACE" -l app.kubernetes.io/component=ui -o jsonpath='{.items[0].spec.host}' 2>/dev/null)
 
         local external_accessible=0
 
@@ -913,6 +918,17 @@ run_health_checks() {
         if [ -n "$kruize_route" ] && curl -f -s "http://$kruize_route/api/kruize/listPerformanceProfiles" >/dev/null 2>&1; then
             echo_success "  → Kruize API externally accessible: http://$kruize_route/api/kruize/listPerformanceProfiles"
             external_accessible=$((external_accessible + 1))
+        fi
+
+        if [ -n "$ui_route" ]; then
+            # UI is OAuth protected, so we expect a redirect (302) or success (200)
+            local ui_status=$(curl -s -o /dev/null -w "%{http_code}" "https://$ui_route" -k 2>/dev/null)
+            if [ "$ui_status" = "200" ] || [ "$ui_status" = "302" ] || [ "$ui_status" = "303" ]; then
+                echo_success "  → UI externally accessible (OAuth protected): https://$ui_route"
+                external_accessible=$((external_accessible + 1))
+            else
+                echo_info "  → UI route exists but not accessible (status: $ui_status): https://$ui_route"
+            fi
         fi
 
         if [ $external_accessible -eq 0 ]; then

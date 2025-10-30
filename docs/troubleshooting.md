@@ -339,6 +339,166 @@ kubectl set resources deployment/strimzi-cluster-operator \
 kubectl get pods -n kafka -l name=strimzi-cluster-operator
 ```
 
+---
+
+### UI Issues (OpenShift Only)
+
+**Problem**: UI not accessible, OAuth redirect loop, or "Session expired" errors.
+
+#### UI Pod Not Running
+
+**Check pod status:**
+```bash
+# Check if UI pod exists
+kubectl get pods -n ros-ocp -l app.kubernetes.io/component=ui
+
+# View pod details
+kubectl describe pod -n ros-ocp -l app.kubernetes.io/component=ui
+
+# Check logs
+kubectl logs -n ros-ocp -l app.kubernetes.io/component=ui -c oauth-proxy
+kubectl logs -n ros-ocp -l app.kubernetes.io/component=ui -c app
+```
+
+**Common causes:**
+- **Not on OpenShift**: UI is only deployed on OpenShift (check `isOpenShift` template condition)
+- **Image pull errors**: Check `imagePullPolicy` and image availability
+- **Resource limits**: Check if pod is OOMKilled or CPU throttled
+
+**Solution:**
+```bash
+# Verify OpenShift platform
+oc version
+
+# Check image pull status
+kubectl get events -n ros-ocp --field-selector involvedObject.kind=Pod
+
+# Increase resources if needed
+helm upgrade ros-ocp ./ros-ocp -n ros-ocp \
+  --set ui.oauth-proxy.resources.limits.memory=256Mi \
+  --set ui.app.resources.limits.memory=256Mi
+```
+
+#### OAuth Redirect Loop
+
+**Problem**: Continuously redirected between UI and OpenShift OAuth server.
+
+**Cause**: ServiceAccount annotation mismatch or route name mismatch.
+
+**Check configuration:**
+```bash
+# Verify ServiceAccount annotation
+kubectl get serviceaccount -n ros-ocp -l app.kubernetes.io/component=ui -o yaml | grep oauth-redirectreference
+
+# Verify route exists with matching name
+kubectl get route -n ros-ocp -l app.kubernetes.io/component=ui
+```
+
+**Expected annotation:**
+```yaml
+serviceaccounts.openshift.io/oauth-redirectreference.primary: '{"kind":"OAuthRedirectReference","apiVersion":"v1","reference":{"kind":"Route","name":"<fullname>-ui"}}'
+```
+
+**Solution:**
+```bash
+# Reinstall to fix annotation
+helm upgrade ros-ocp ./ros-ocp -n ros-ocp --force
+```
+
+#### Session Expired / Cookie Issues
+
+**Problem**: Users get logged out frequently or "Session expired" errors.
+
+**Cause**: Cookie secret changed or session timeout too short.
+
+**Check cookie secret:**
+```bash
+# Verify cookie secret exists and persists
+kubectl get secret -n ros-ocp -l app.kubernetes.io/component=ui | grep cookie
+
+# Check secret age
+kubectl get secret -n ros-ocp <fullname>-ui-cookie-secret -o jsonpath='{.metadata.creationTimestamp}'
+```
+
+**Note**: Cookie secret uses `lookup` function to persist across Helm upgrades. If the secret was manually deleted, sessions will be invalidated.
+
+**Solution:**
+```bash
+# Cookie secret will auto-regenerate on next Helm operation
+# Users will need to log in again
+
+# To force regeneration:
+kubectl delete secret -n ros-ocp <fullname>-ui-cookie-secret
+helm upgrade ros-ocp ./ros-ocp -n ros-ocp
+```
+
+#### UI Not Accessible via Route
+
+**Problem**: Route exists but UI returns 503 or connection errors.
+
+**Check route and service:**
+```bash
+# Get route URL
+oc get route -n ros-ocp -l app.kubernetes.io/component=ui -o jsonpath='{.items[0].spec.host}'
+
+# Check route backend
+oc describe route -n ros-ocp -l app.kubernetes.io/component=ui
+
+# Check service endpoints
+kubectl get endpoints -n ros-ocp -l app.kubernetes.io/component=ui
+
+# Test OAuth proxy health
+kubectl exec -n ros-ocp -l app.kubernetes.io/component=ui -c oauth-proxy -- curl -k https://localhost:8443/oauth/healthz
+```
+
+**Common causes:**
+- **TLS certificate not ready**: Service CA may still be generating certificates
+- **Port mismatch**: Service should target port 8443 (HTTPS)
+- **Pod not ready**: OAuth proxy or app container failing health checks
+
+**Solution:**
+```bash
+# Wait for TLS secret to be created
+kubectl wait --for=condition=ready secret/<fullname>-ui-tls -n ros-ocp --timeout=60s
+
+# Check TLS secret
+kubectl get secret -n ros-ocp <fullname>-ui-tls
+
+# Restart pod if TLS secret was created after pod started
+kubectl rollout restart deployment -n ros-ocp -l app.kubernetes.io/component=ui
+```
+
+#### App Container Failing
+
+**Problem**: OAuth proxy works but app container returns errors.
+
+**Check app logs:**
+```bash
+# View app container logs
+kubectl logs -n ros-ocp -l app.kubernetes.io/component=ui -c app --tail=100
+
+# Check app health
+kubectl exec -n ros-ocp -l app.kubernetes.io/component=ui -c app -- curl http://localhost:8080/
+```
+
+**Common causes:**
+- **Wrong port**: App must listen on port configured in `ui.app.port` (default: 8080)
+- **App startup failure**: Check application-specific errors in logs
+- **Resource limits**: App may be OOMKilled or throttled
+
+**Solution:**
+```bash
+# Adjust app port if needed
+helm upgrade ros-ocp ./ros-ocp -n ros-ocp --set ui.app.port=3000
+
+# Increase resources
+helm upgrade ros-ocp ./ros-ocp -n ros-ocp \
+  --set ui.app.resources.limits.memory=512Mi \
+  --set ui.app.resources.requests.memory=256Mi
+```
+
+---
+
 ### Debug Commands
 
 ```bash

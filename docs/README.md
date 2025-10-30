@@ -21,6 +21,8 @@ Welcome to the Resource Optimization Service (ROS) for OpenShift Container Platf
 
 | Document | Purpose | When to Use |
 |----------|---------|-------------|
+| **[UI OAuth Authentication](ui-oauth-authentication.md)** | Complete guide for OpenShift OAuth proxy authentication for UI | Understanding and troubleshooting UI authentication (OpenShift only) |
+| **[OAuth2 TokenReview Authentication](oauth2-tokenreview-authentication.md)** | OAuth2 token authentication via Kubernetes TokenReview API | Understanding backend API authentication with Authorino |
 | **[Keycloak JWT Authentication Setup](keycloak-jwt-authentication-setup.md)** | Complete guide for setting up JWT authentication with Keycloak | Configuring authentication for production environments |
 | **[Native JWT Authentication](native-jwt-authentication.md)** | Detailed explanation of JWT authentication architecture | Understanding how JWT authentication works in ROS-OCP |
 | **[TLS Certificate Options](tls-certificate-options.md)** | Guide to different TLS certificate configuration scenarios | Configuring TLS for Keycloak JWKS endpoint validation |
@@ -58,10 +60,12 @@ Welcome to the Resource Optimization Service (ROS) for OpenShift Container Platf
 4. Review **[Configuration Reference](configuration.md)** for production settings
 
 ### "I'm setting up authentication"
-1. Read **[Native JWT Authentication](native-jwt-authentication.md)** to understand the architecture
-2. Follow **[Keycloak JWT Authentication Setup](keycloak-jwt-authentication-setup.md)** for step-by-step instructions
-3. Use **[TLS Certificate Options](tls-certificate-options.md)** for TLS configuration
-4. Reference **[External Keycloak Scenario](external-keycloak-scenario.md)** if using external Keycloak
+1. For **UI**: Read **[UI OAuth Authentication](ui-oauth-authentication.md)** for OpenShift OAuth proxy setup
+2. For **Backend API**: Read **[OAuth2 TokenReview Authentication](oauth2-tokenreview-authentication.md)** for Authorino setup
+3. For **Ingress**: Follow **[Keycloak JWT Authentication Setup](keycloak-jwt-authentication-setup.md)** for step-by-step instructions
+4. For **Architecture**: Read **[Native JWT Authentication](native-jwt-authentication.md)** to understand the overall design
+5. For **TLS**: Use **[TLS Certificate Options](tls-certificate-options.md)** for certificate configuration
+6. For **External Keycloak**: Reference **[External Keycloak Scenario](external-keycloak-scenario.md)**
 
 ### "I'm setting up the Cost Management Operator"
 1. Follow **[Cost Management Operator TLS Config Setup](cost-management-operator-tls-config-setup.md)**
@@ -136,6 +140,44 @@ Welcome to the Resource Optimization Service (ROS) for OpenShift Container Platf
 ---
 
 ### Authentication & Security
+
+#### [UI OAuth Authentication](ui-oauth-authentication.md)
+**Purpose:** Complete guide for OpenShift OAuth proxy authentication protecting the UI frontend.
+
+**Use when:**
+- Understanding how UI authentication works
+- Troubleshooting UI login issues
+- Configuring UI OAuth proxy
+- Deploying UI on OpenShift
+
+**Key topics:**
+- OpenShift OAuth proxy sidecar pattern
+- Authentication flow diagrams
+- TLS certificate auto-generation
+- Session management and persistence
+- ServiceAccount OAuth redirect configuration
+- Testing and troubleshooting procedures
+- Security considerations
+
+---
+
+#### [OAuth2 TokenReview Authentication](oauth2-tokenreview-authentication.md)
+**Purpose:** OAuth2 token authentication via Kubernetes TokenReview API through Authorino for backend services.
+
+**Use when:**
+- Understanding how backend API authentication works
+- Configuring Authorino for TokenReview
+- Troubleshooting API authentication issues
+- Setting up service-to-service authentication
+
+**Key topics:**
+- Envoy ext_authz with Authorino
+- Kubernetes TokenReview API integration
+- Service account authentication
+- rh-identity header transformation
+- Testing and validation procedures
+
+---
 
 #### [Keycloak JWT Authentication Setup](keycloak-jwt-authentication-setup.md)
 **Purpose:** Complete guide for configuring JWT authentication with Keycloak, including both local and external Keycloak scenarios.
@@ -240,7 +282,7 @@ Welcome to the Resource Optimization Service (ROS) for OpenShift Container Platf
 
 **Key topics:**
 - Global settings
-- Component-specific configuration
+- Component-specific configuration (including UI with OAuth proxy)
 - Database settings
 - Authentication configuration
 - Network policies
@@ -318,6 +360,7 @@ Welcome to the Resource Optimization Service (ROS) for OpenShift Container Platf
 
 **Key topics:**
 - Common issues by component
+- UI OAuth authentication issues (OpenShift)
 - Diagnostic commands
 - Log analysis
 - Network troubleshooting

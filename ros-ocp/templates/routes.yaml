@@ -81,4 +81,23 @@ spec:
     insecureEdgeTerminationPolicy: {{ .Values.serviceRoute.tls.insecureEdgeTerminationPolicy }}
     {{- end }}
   {{- end }}
+---
+# Route for UI (frontend with OAuth proxy)
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: {{ include "ros-ocp.fullname" . }}-ui
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ros-ocp.labels" . | nindent 4 }}
+    app.kubernetes.io/component: ui
+spec:
+  to:
+    kind: Service
+    name: {{ include "ros-ocp.fullname" . }}-ui
+  port:
+    targetPort: https
+  tls:
+    termination: reencrypt
+    insecureEdgeTerminationPolicy: Redirect
 {{- end }}
