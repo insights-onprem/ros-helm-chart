@@ -1,3 +1,4 @@
+{{- if eq (include "ros-ocp.jwt.shouldEnable" .) "true" }}
 ---
 # NetworkPolicy to secure metrics endpoints for ros-ocp-backend components
 # Allows access only from OpenShift monitoring namespace (Prometheus)
@@ -127,4 +128,4 @@ spec:
       ports:
         - protocol: TCP
           port: 9080  # Envoy sidecar port (jwt_auth.envoy.port)
-
+{{- end }}

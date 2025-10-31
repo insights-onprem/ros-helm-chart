@@ -245,7 +245,7 @@ The Lua filter extracts JWT claims and injects these headers:
 ```bash
 # Get JWT token from Keycloak
 TOKEN=$(curl -s -k -X POST \
-  "https://keycloak-rhsso.apps.example.com/auth/realms/kubernetes/protocol/openid-connect/token" \
+  "https://keycloak-keycloak.apps.example.com/auth/realms/kubernetes/protocol/openid-connect/token" \
   -H "Content-Type: application/x-www-form-urlencoded" \
   -d "grant_type=client_credentials" \
   -d "client_id=cost-management-operator" \
@@ -268,7 +268,7 @@ cd scripts
 ```
 
 This script:
-1. Auto-detects Keycloak configuration
+1. Auto-detects Red Hat Build of Keycloak configuration
 2. Obtains JWT token using client credentials
 3. Creates test payload with `manifest.json` and CSV data
 4. Uploads using JWT Bearer authentication

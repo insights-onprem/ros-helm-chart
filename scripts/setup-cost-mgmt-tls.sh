@@ -15,7 +15,7 @@ PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
 # Default configuration
 DEFAULT_NAMESPACE="costmanagement-metrics-operator"
-DEFAULT_KEYCLOAK_NAMESPACE="rhsso"
+DEFAULT_KEYCLOAK_NAMESPACE="keycloak"
 DEFAULT_CLIENT_ID="cost-management-operator"
 DEFAULT_INGRESS_URL=""
 DEFAULT_KEYCLOAK_URL=""
@@ -713,9 +713,22 @@ extract_keycloak_credentials() {
 create_metrics_config() {
     print_header "Creating CostManagementMetricsConfig"
 
-    # Use auto-detected URLs or defaults
-    INGRESS_URL="${DEFAULT_INGRESS_URL:-https://ros-ocp-ingress-ros-ocp.apps.cluster.local}"
-    KEYCLOAK_URL="${DEFAULT_KEYCLOAK_URL:-https://keycloak-rhsso.apps.cluster.local}"
+    # Use auto-detected URLs or fail with clear error
+    INGRESS_URL="${DEFAULT_INGRESS_URL}"
+    KEYCLOAK_URL="${DEFAULT_KEYCLOAK_URL}"
+
+    # Validate that URLs were detected
+    if [[ -z "$INGRESS_URL" ]]; then
+        print_error "ROS Ingress URL was not detected"
+        print_error "Please provide it manually: $0 --ingress-url <url>"
+        exit 1
+    fi
+
+    if [[ -z "$KEYCLOAK_URL" ]]; then
+        print_error "Keycloak URL was not detected"
+        print_error "Please provide it manually: $0 --keycloak-url <url>"
+        exit 1
+    fi
 
     print_status "Using ingress URL: $INGRESS_URL"
     print_status "Using Keycloak URL: $KEYCLOAK_URL"
@@ -735,7 +748,7 @@ spec:
   # Authentication configuration for Keycloak with JWT
   authentication:
     type: "service-account"  # Use service-account for Keycloak JWT via client_credentials flow
-    token_url: "$KEYCLOAK_URL/auth/realms/kubernetes/protocol/openid-connect/token"
+    token_url: "$KEYCLOAK_URL/realms/kubernetes/protocol/openid-connect/token"
     secret_name: "cost-management-auth-secret"
 
   # Upload configuration - works with JWT authentication

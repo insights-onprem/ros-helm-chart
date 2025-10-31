@@ -296,7 +296,7 @@ oc get configmap ros-ocp-envoy-config-ingress -n ros-ocp -o yaml
 
 # Verify Keycloak connectivity
 oc exec -n ros-ocp deployment/ros-ocp-ingress -c envoy-proxy -- \
-  curl -k -I https://keycloak-rhsso.apps.example.com
+  curl -k -I https://keycloak-keycloak.apps.example.com
 ```
 
 **Common Causes and Fixes**:
@@ -312,7 +312,7 @@ oc exec -n ros-ocp deployment/ros-ocp-ingress -c envoy-proxy -- \
    - **Cause**: Network connectivity or DNS issues
    - **Fix**: Check Keycloak route and connectivity
    ```bash
-   oc get route keycloak -n rhsso -o jsonpath='{.spec.host}'
+   oc get route keycloak -n keycloak -o jsonpath='{.spec.host}'
    ```
 
 3. **JWT missing org_id claim**

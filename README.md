@@ -129,11 +129,11 @@ oc get routes -n ros-ocp
 
 ### JWT Authentication (OpenShift/Production)
 
-For OpenShift deployments, JWT authentication is **automatically enabled** and requires Keycloak/RH SSO and Authorino configuration:
+For OpenShift deployments, JWT authentication is **automatically enabled** and requires Keycloak and Authorino configuration:
 
 ```bash
-# Step 1: Deploy Keycloak/RH SSO (if not already deployed)
-./scripts/deploy-rhsso.sh
+# Step 1: Deploy Red Hat Build of Keycloak (RHBK)
+./scripts/deploy-rhbk.sh
 
 # Step 2: Install Authorino for OAuth2 authentication
 ./scripts/install-authorino.sh
@@ -149,6 +149,9 @@ Key requirements:
 - ✅ Service account client credentials
 - ✅ Self-signed CA certificate bundle (auto-configured)
 - ✅ Cost Management Operator configured with JWT token URL
+
+**Operator Support:**
+- ✅ Red Hat Build of Keycloak (RHBK) v22+ - `k8s.keycloak.org/v2alpha1`
 
 **Architecture**: [JWT Authentication Overview](docs/native-jwt-authentication.md)
 

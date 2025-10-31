@@ -341,8 +341,15 @@ If you prefer manual installation:
 **Step 1: Install Authorino Operator**
 
 ```bash
-# Create OperatorGroup
-oc apply -f - <<EOF
+# Check if an OperatorGroup already exists (openshift-operators usually has 'global-operators')
+EXISTING_OG=$(oc get operatorgroups -n openshift-operators -o name 2>/dev/null | head -1)
+
+if [ -n "$EXISTING_OG" ]; then
+  echo "OperatorGroup already exists: $EXISTING_OG"
+  echo "Skipping OperatorGroup creation"
+else
+  # Create OperatorGroup if none exists
+  oc apply -f - <<EOF
 apiVersion: operators.coreos.com/v1
 kind: OperatorGroup
 metadata:
@@ -350,6 +357,7 @@ metadata:
   namespace: openshift-operators
 spec: {}
 EOF
+fi
 
 # Create Subscription
 oc apply -f - <<EOF
@@ -359,7 +367,7 @@ metadata:
   name: authorino-operator
   namespace: openshift-operators
 spec:
-  channel: tech-preview-v1
+  channel: stable
   name: authorino-operator
   source: redhat-operators
   sourceNamespace: openshift-marketplace

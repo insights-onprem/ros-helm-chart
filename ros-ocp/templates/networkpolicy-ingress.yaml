@@ -1,4 +1,4 @@
-{{- if eq (include "ros-ocp.isOpenShift" .) "true" }}
+{{- if eq (include "ros-ocp.jwt.shouldEnable" .) "true" }}
 ---
 # NetworkPolicy to allow external traffic to Ingress service for file uploads via Envoy sidecar
 apiVersion: networking.k8s.io/v1

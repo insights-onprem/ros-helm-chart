@@ -2,7 +2,7 @@ apiVersion: v2
 name: ros-ocp
 description: A Helm chart for ROS-OCP Backend services
 type: application
-version: 0.1.8
+version: 0.1.9
 appVersion: "latest"
 
 keywords:

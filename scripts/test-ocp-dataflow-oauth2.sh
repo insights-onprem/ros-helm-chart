@@ -881,7 +881,7 @@ check_recommendations_with_retry() {
 
 # Main execution
 main() {
-    echo_info "ROS-OCP Hybrid Authentication Data Flow Test"
+    echo_info "ROS-OCP Hybrid Authentication Data Flow Test (OAuth2 + JWT)"
     echo_info "============================================"
     echo_info "Ingress: Keycloak JWT (external uploads from Cost Management Operator)"
     echo_info "Backend API: OAuth2 TokenReview (user access from OpenShift Console UI)"
@@ -1079,15 +1079,16 @@ case "${1:-}" in
         echo "  8. Verifies the upload was processed successfully"
         echo "  9. Validates ML recommendations were generated"
         echo ""
-        echo "Note: The script validates the complete end-to-end flow including:"
-        echo "      - OAuth2 TokenReview for UI/user access (simulates Console UI)"
-        echo "      - Keycloak JWT for external Cost Management Operator uploads"
+        echo "Note: This script validates the complete end-to-end flow with:"
+        echo "      - OAuth2 TokenReview for backend API (simulates Console UI access)"
+        echo "      - Keycloak JWT for ingress API (Cost Management Operator uploads)"
         echo ""
         echo "Requirements:"
         echo "  - Active OpenShift session (oc login completed)"
         echo "  - Keycloak deployed with cost-management-operator client"
         echo "  - ROS ingress with JWT authentication enabled"
         echo "  - ROS backend API with OAuth2 TokenReview (Envoy+Authorino)"
+        echo "  - Authorino deployed and configured"
         echo "  - User must have access to the ros-ocp namespace"
         exit 0
         ;;

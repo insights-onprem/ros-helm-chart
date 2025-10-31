@@ -107,17 +107,17 @@ spec:
             - name: tmp
               mountPath: /tmp
           livenessProbe:
-            httpGet:
-              path: /ready
-              port: {{ .Values.jwt_auth.envoy.adminPort }}
+            tcpSocket:
+              port: {{ .Values.jwt_auth.envoy.port }}
             initialDelaySeconds: 15
             periodSeconds: 20
+            timeoutSeconds: 1
           readinessProbe:
-            httpGet:
-              path: /ready
-              port: {{ .Values.jwt_auth.envoy.adminPort }}
-            initialDelaySeconds: 5
+            tcpSocket:
+              port: {{ .Values.jwt_auth.envoy.port }}
+            initialDelaySeconds: 10
             periodSeconds: 10
+            timeoutSeconds: 1
           resources:
             limits:
               cpu: 500m

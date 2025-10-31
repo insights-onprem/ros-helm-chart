@@ -19,7 +19,7 @@ When the operator attempts to communicate with services using self-signed certif
 
 ```bash
 # JWT Token Generation (Keycloak communication)
-ERROR: Get "https://keycloak-rhsso.apps.cluster.local/auth/realms/kubernetes/protocol/openid-connect/token":
+ERROR: Get "https://keycloak-keycloak.apps.cluster.local/realms/kubernetes/protocol/openid-connect/token":
 x509: certificate signed by unknown authority
 
 # Upload to ROS Ingress
@@ -57,7 +57,7 @@ The operator logs will show continuous authentication and upload failures, preve
 ## Overview
 
 The Cost Management Operator communicates with several services that may use self-signed certificates:
-1. **Keycloak/RH SSO** - for JWT token generation
+1. **Red Hat Build of Keycloak (RHBK)** - for JWT token generation
 2. **ROS Ingress** - for uploading metrics data
 3. **Prometheus/Thanos** - for collecting metrics
 4. **OpenShift API** - for cluster metadata
@@ -120,7 +120,7 @@ The `combined-ca-bundle` ConfigMap needs to include all custom CA certificates.
 oc get configmap combined-ca-bundle -n costmanagement-metrics-operator -o jsonpath='{.data.ca-bundle\.crt}' > current-ca-bundle.crt
 
 # Get Keycloak CA certificate
-oc get secret keycloak-tls-secret -n rhsso -o jsonpath='{.data.tls\.crt}' | base64 -d > keycloak-ca.crt
+oc get secret keycloak-tls-secret -n keycloak -o jsonpath='{.data.tls\.crt}' | base64 -d > keycloak-ca.crt
 
 # Get OpenShift ingress CA certificate
 oc get secret router-ca -n openshift-ingress-operator -o jsonpath='{.data.tls\.crt}' | base64 -d > ingress-ca.crt
@@ -153,7 +153,7 @@ spec:
   # Authentication configuration for Keycloak
   authentication:
     type: "token"
-    token_url: "https://keycloak-rhsso.apps.cluster.local/auth/realms/kubernetes/protocol/openid-connect/token"
+    token_url: "https://keycloak-keycloak.apps.cluster.local/realms/kubernetes/protocol/openid-connect/token"
     # Custom client configuration
     client_id: "cost-management-operator"
     # Secret containing client credentials
@@ -209,7 +209,7 @@ oc get configmap service-ca-bundle -n openshift-config -o jsonpath='{.data.servi
 
 # Get Keycloak CA (if available)
 echo "📥 Extracting Keycloak CA certificate..."
-KEYCLOAK_NS=$(oc get keycloak -A -o jsonpath='{.items[0].metadata.namespace}' 2>/dev/null || echo "rhsso")
+KEYCLOAK_NS=$(oc get keycloak -A -o jsonpath='{.items[0].metadata.namespace}' 2>/dev/null || echo "keycloak")
 if oc get secret -n "$KEYCLOAK_NS" | grep -q tls; then
     KEYCLOAK_SECRET=$(oc get secret -n "$KEYCLOAK_NS" -o name | grep tls | head -1)
     oc get "$KEYCLOAK_SECRET" -n "$KEYCLOAK_NS" -o jsonpath='{.data.tls\.crt}' | base64 -d > keycloak-ca.crt
@@ -273,7 +273,7 @@ oc exec -n costmanagement-metrics-operator deployment/costmanagement-metrics-ope
 oc exec -n costmanagement-metrics-operator deployment/costmanagement-metrics-operator -- printenv | grep -E "(SSL_CERT_FILE|REQUESTS_CA_BUNDLE)"
 
 # Test Keycloak connectivity
-oc exec -n costmanagement-metrics-operator deployment/costmanagement-metrics-operator -- curl -v https://keycloak-rhsso.apps.cluster.local/auth/realms/kubernetes/.well-known/openid_configuration
+oc exec -n costmanagement-metrics-operator deployment/costmanagement-metrics-operator -- curl -v https://keycloak-keycloak.apps.cluster.local/realms/kubernetes/.well-known/openid_configuration
 ```
 
 #### Common TLS Errors and Solutions
@@ -285,8 +285,8 @@ Based on our real-world testing, here are the exact errors you'll encounter and 
 | `x509: certificate signed by unknown authority` | JWT token generation from Keycloak | Keycloak CA not in bundle | Add Keycloak CA to combined-ca-bundle |
 | `tls: failed to verify certificate: x509: certificate signed by unknown authority` | Upload to ROS ingress | Ingress route CA not in bundle | Add OpenShift ingress CA to bundle |
 | `SSL: CERTIFICATE_VERIFY_FAILED` | Any HTTPS communication | Outdated or incomplete CA bundle | Run CA bundle update script |
-| `dial tcp: lookup keycloak-rhsso.apps.cluster.local: no such host` | DNS resolution failure | Network/DNS issue | Verify service names and DNS |
-| `connection refused` | Service connectivity | Service not available | Check pod status: `oc get pods -n rhsso` |
+| `dial tcp: lookup keycloak-keycloak.apps.cluster.local: no such host` | DNS resolution failure | Network/DNS issue | Verify service names and DNS |
+| `connection refused` | Service connectivity | Service not available | Check pod status: `oc get pods -n keycloak` |
 | `context deadline exceeded` | Request timeout | Network or TLS handshake issues | Check network connectivity and certificates |
 
 #### Real-World Debugging Experience
@@ -346,7 +346,7 @@ metadata:
 spec:
   authentication:
     type: "token"
-    token_url: "https://keycloak-rhsso.apps.cluster.local/auth/realms/kubernetes/protocol/openid-connect/token"
+    token_url: "https://keycloak-keycloak.apps.cluster.local/realms/kubernetes/protocol/openid-connect/token"
     client_id: "cost-management-operator"
     secret_name: "cost-management-auth-secret"
 

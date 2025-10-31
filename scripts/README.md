@@ -8,8 +8,8 @@ Automation scripts for deploying, configuring, and testing the Resource Optimiza
 |--------|---------|-------------|
 | `deploy-strimzi.sh` | Deploy Kafka infrastructure | All environments |
 | `install-helm-chart.sh` | Deploy ROS Helm chart | All environments |
-| `deploy-rhsso.sh` | Deploy Keycloak/RHSSO | OpenShift |
 | `install-authorino.sh` | Deploy Authorino for OAuth2 | OpenShift |
+| `deploy-rhbk.sh` | Deploy Red Hat Build of Keycloak | OpenShift |
 | `setup-cost-mgmt-tls.sh` | Configure TLS certificates | OpenShift |
 | `test-ocp-dataflow-jwt.sh` | Test JWT + recommendations | JWT-enabled clusters |
 | `query-kruize.sh` | Query Kruize database | All environments |
@@ -38,8 +38,8 @@ Automation scripts for deploying, configuring, and testing the Resource Optimiza
 
 ### JWT Authentication Setup
 ```bash
-# 1. Deploy Keycloak/RHSSO
-./deploy-rhsso.sh
+# 1. Deploy Red Hat Build of Keycloak
+./deploy-rhbk.sh
 
 # 2. Deploy Kafka infrastructure
 ./deploy-strimzi.sh
@@ -122,25 +122,28 @@ export NAMESPACE=ros-production
 
 ---
 
-### `deploy-rhsso.sh`
-Deploy Red Hat Single Sign-On (Keycloak) with ROS integration.
+### `deploy-rhbk.sh`
+Deploy Red Hat Build of Keycloak (RHBK) with ROS integration.
 
 **What it creates:**
-- RHSSO Operator in target namespace
+- RHBK Operator in target namespace
 - Keycloak instance with `kubernetes` realm
 - `cost-management-operator` client
 - OpenShift OIDC integration
 
 **Usage:**
 ```bash
-# Deploy to default namespace (rhsso)
-./deploy-rhsso.sh
+# Deploy to default namespace (keycloak)
+./deploy-rhbk.sh
 
 # Deploy to custom namespace
-./deploy-rhsso.sh --namespace my-keycloak
+RHBK_NAMESPACE=my-keycloak ./deploy-rhbk.sh
 
-# Skip OIDC integration
-./deploy-rhsso.sh --skip-oidc
+# Validate existing deployment
+./deploy-rhbk.sh validate
+
+# Clean up deployment
+./deploy-rhbk.sh cleanup
 ```
 
 ---
@@ -304,7 +307,7 @@ End-to-end test of JWT authentication flow with sample cost data.
 
 **Requirements:**
 - JWT authentication enabled in ROS deployment
-- Keycloak/RHSSO with `cost-management-operator` client
+- Red Hat Build of Keycloak (RHBK) with `cost-management-operator` client
 
 **Best for:** CI/CD pipelines, complete E2E validation including ML recommendations
 

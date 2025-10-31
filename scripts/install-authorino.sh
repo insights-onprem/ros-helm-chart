@@ -76,10 +76,17 @@ install_operator() {
         return 0
     fi
 
-    echo_info "Creating OperatorGroup for AllNamespaces..."
+    # Check if an OperatorGroup already exists in the namespace
+    local existing_og=$(oc get operatorgroups -n "$AUTHORINO_OPERATOR_NAMESPACE" -o name 2>/dev/null | head -1)
 
-    # Create OperatorGroup for all namespaces
-    cat <<EOF | oc apply -f -
+    if [ -n "$existing_og" ]; then
+        echo_info "OperatorGroup already exists in namespace: $existing_og"
+        echo_success "Using existing OperatorGroup"
+    else
+        echo_info "Creating OperatorGroup for AllNamespaces..."
+
+        # Create OperatorGroup for all namespaces
+        cat <<EOF | oc apply -f -
 apiVersion: operators.coreos.com/v1
 kind: OperatorGroup
 metadata:
@@ -88,7 +95,8 @@ metadata:
 spec: {}
 EOF
 
-    echo_success "OperatorGroup created"
+        echo_success "OperatorGroup created"
+    fi
 
     echo_info "Creating Subscription for Authorino Operator..."
 
@@ -100,7 +108,7 @@ metadata:
   name: authorino-operator
   namespace: ${AUTHORINO_OPERATOR_NAMESPACE}
 spec:
-  channel: tech-preview-v1
+  channel: stable
   name: authorino-operator
   source: redhat-operators
   sourceNamespace: openshift-marketplace
@@ -210,27 +218,73 @@ EOF
 
     echo_success "Authorino CR created with TLS enabled"
 
-    echo_info "Waiting for Authorino pods to be ready..."
-    local max_wait=120
+    echo_info "Waiting for Authorino operator to create deployment (this may take several minutes)..."
+    echo_info "The Authorino operator needs time to reconcile and create the deployment"
+
+    local max_wait=360  # 6 minutes timeout
     local wait_count=0
+    local deployment_found=false
 
+    # Step 1: Wait for deployment to be created by operator
+    echo_info "Step 1/2: Waiting for Authorino deployment to be created..."
     while [ $wait_count -lt $max_wait ]; do
-        local ready_pods=$(oc get pods -n "$NAMESPACE" -l app.kubernetes.io/name=authorino 2>/dev/null | grep "Running" | wc -l | tr -d ' ')
-
-        if [ "$ready_pods" -gt 0 ]; then
-            echo_success "Authorino pods are running"
-            oc get pods -n "$NAMESPACE" -l app.kubernetes.io/name=authorino
-            return 0
+        if oc get deployment authorino -n "$NAMESPACE" >/dev/null 2>&1; then
+            echo_success "✓ Authorino deployment created by operator"
+            deployment_found=true
+            break
         fi
 
-        echo -n "."
+        if [ $((wait_count % 30)) -eq 0 ] && [ $wait_count -gt 0 ]; then
+            echo_info "Still waiting for operator to create deployment... (${wait_count}s elapsed)"
+        fi
+
         sleep 5
         wait_count=$((wait_count + 5))
     done
 
-    echo ""
-    echo_error "Timeout waiting for Authorino pods to be ready"
-    return 1
+    if [ "$deployment_found" = false ]; then
+        echo ""
+        echo_error "Timeout: Authorino operator did not create deployment after ${max_wait}s"
+        echo_error "This may indicate an issue with the Authorino operator"
+        echo_info "Check operator logs: oc logs -n openshift-operators -l control-plane=authorino-operator"
+        return 1
+    fi
+
+    # Step 2: Wait for deployment to be ready
+    echo_info "Step 2/2: Waiting for Authorino deployment to be ready..."
+
+    if oc wait --for=condition=Available deployment/authorino -n "$NAMESPACE" --timeout=$((max_wait - wait_count))s 2>/dev/null; then
+        echo_success "✓ Authorino deployment is ready"
+
+        # Verify pods are running (using correct label selector)
+        local ready_pods=$(oc get pods -n "$NAMESPACE" -l authorino-resource=authorino 2>/dev/null | grep "Running" | wc -l | tr -d ' ')
+        if [ "$ready_pods" -gt 0 ]; then
+            echo_success "✓ Authorino pods are running"
+            oc get deployment,pods -n "$NAMESPACE" -l authorino-resource=authorino
+            return 0
+        else
+            echo_warning "Deployment ready but no running pods found yet"
+            echo_info "Waiting 30 seconds for pods to start..."
+            sleep 30
+            ready_pods=$(oc get pods -n "$NAMESPACE" -l authorino-resource=authorino 2>/dev/null | grep "Running" | wc -l | tr -d ' ')
+            if [ "$ready_pods" -gt 0 ]; then
+                echo_success "✓ Authorino pods are now running"
+                oc get deployment,pods -n "$NAMESPACE" -l authorino-resource=authorino
+                return 0
+            else
+                echo_error "No running pods found after additional wait"
+                oc get pods -n "$NAMESPACE" -l authorino-resource=authorino
+                return 1
+            fi
+        fi
+    else
+        echo ""
+        echo_error "Timeout: Authorino deployment not ready after waiting"
+        echo_info "Current deployment status:"
+        oc get deployment authorino -n "$NAMESPACE" -o wide 2>/dev/null || echo "Deployment not found"
+        oc get pods -n "$NAMESPACE" -l app=authorino 2>/dev/null || echo "No pods found"
+        return 1
+    fi
 }
 
 # Create RBAC for TokenReview
@@ -309,11 +363,12 @@ verify_installation() {
     fi
 
     echo_info "Checking Authorino pods..."
-    local pod_count=$(oc get pods -n "$NAMESPACE" -l app.kubernetes.io/name=authorino --no-headers 2>/dev/null | wc -l | tr -d ' ')
+    local pod_count=$(oc get pods -n "$NAMESPACE" -l authorino-resource=authorino --no-headers 2>/dev/null | wc -l | tr -d ' ')
     if [ "$pod_count" -eq 0 ]; then
         echo_error "No Authorino pods found"
         return 1
     fi
+    echo_success "✓ Found $pod_count Authorino pod(s) running"
 
     echo_info "Checking Authorino service..."
     if ! oc get svc -n "$NAMESPACE" | grep -q "authorino-authorino-authorization"; then

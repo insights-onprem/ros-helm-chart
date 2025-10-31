@@ -162,7 +162,7 @@ create_namespace() {
 # Function to cleanup existing Strimzi operators (delegates to deploy-strimzi.sh)
 cleanup_existing_strimzi() {
     echo_info "Cleaning up Strimzi operators using deploy-strimzi.sh..."
-    
+
     local deploy_script="$SCRIPT_DIR/deploy-strimzi.sh"
     if [ -f "$deploy_script" ]; then
         # Call deploy-strimzi.sh cleanup (no interactive prompt needed anymore)
@@ -182,22 +182,22 @@ cleanup_existing_strimzi() {
 # Function to verify existing Strimzi operator
 verify_existing_strimzi() {
     local strimzi_namespace="$1"
-    
+
     echo_info "Verifying existing Strimzi operator in namespace: $strimzi_namespace"
-    
+
     # Check if Strimzi operator exists
     if ! kubectl get pods -n "$strimzi_namespace" -l name=strimzi-cluster-operator >/dev/null 2>&1; then
         echo_error "Strimzi operator not found in namespace: $strimzi_namespace"
         return 1
     fi
-    
+
     # Check Strimzi operator version compatibility
     echo_info "Checking Strimzi operator version compatibility..."
     local strimzi_pod=$(kubectl get pods -n "$strimzi_namespace" -l name=strimzi-cluster-operator -o jsonpath='{.items[0].metadata.name}')
     if [ -n "$strimzi_pod" ]; then
         local strimzi_image=$(kubectl get pod -n "$strimzi_namespace" "$strimzi_pod" -o jsonpath='{.spec.containers[0].image}')
         echo_info "Found Strimzi operator image: $strimzi_image"
-        
+
         # Check if it's a compatible version (should contain 0.45.x for Kafka 3.8.0 support)
         if [[ "$strimzi_image" =~ :0\.45\. ]] || [[ "$strimzi_image" =~ :0\.44\. ]] || [[ "$strimzi_image" =~ :0\.43\. ]]; then
             echo_success "Strimzi operator version is compatible with Kafka 3.8.0"
@@ -209,29 +209,29 @@ verify_existing_strimzi() {
             return 1
         fi
     fi
-    
+
     return 0
 }
 
 # Function to verify existing Kafka cluster
 verify_existing_kafka() {
     local kafka_namespace="$1"
-    
+
     echo_info "Verifying existing Kafka cluster in namespace: $kafka_namespace"
-    
+
     # Check if Kafka cluster exists
     if ! kubectl get kafka -n "$kafka_namespace" >/dev/null 2>&1; then
         echo_error "Kafka cluster not found in namespace: $kafka_namespace"
         return 1
     fi
-    
+
     # Check Kafka cluster version
     echo_info "Checking Kafka cluster version compatibility..."
     local kafka_cluster=$(kubectl get kafka -n "$kafka_namespace" -o jsonpath='{.items[0].metadata.name}')
     if [ -n "$kafka_cluster" ]; then
         local kafka_version=$(kubectl get kafka -n "$kafka_namespace" "$kafka_cluster" -o jsonpath='{.spec.kafka.version}')
         echo_info "Found Kafka cluster version: $kafka_version"
-        
+
         # Check if it's Kafka 3.8.0
         if [ "$kafka_version" = "3.8.0" ]; then
             echo_success "Kafka cluster version is compatible: $kafka_version"
@@ -243,21 +243,21 @@ verify_existing_kafka() {
             return 1
         fi
     fi
-    
+
     return 0
 }
 
 # Function to configure cross-namespace Kafka connectivity
 configure_kafka_connectivity() {
     local kafka_namespace="$1"
-    
+
     echo_info "Configuring Kafka bootstrap servers for cross-namespace communication..."
     local kafka_cluster_name=$(kubectl get kafka -n "$kafka_namespace" -o jsonpath='{.items[0].metadata.name}')
     local kafka_bootstrap_servers="${kafka_cluster_name}-kafka-bootstrap.${kafka_namespace}.svc.cluster.local:9092"
-    
+
     echo_info "Detected Kafka cluster: $kafka_cluster_name"
     echo_info "Kafka bootstrap servers: $kafka_bootstrap_servers"
-    
+
     # Add Kafka bootstrap servers to Helm arguments
     HELM_EXTRA_ARGS+=("--set" "kafka.bootstrapServers=$kafka_bootstrap_servers")
 }
@@ -265,7 +265,7 @@ configure_kafka_connectivity() {
 # Function to verify Strimzi and Kafka prerequisites
 verify_strimzi_and_kafka() {
     echo_info "Verifying Strimzi operator and Kafka cluster prerequisites..."
-    
+
     # If user provided external Kafka bootstrap servers, skip verification
     if [ -n "$KAFKA_BOOTSTRAP_SERVERS" ]; then
         echo_info "Using provided Kafka bootstrap servers: $KAFKA_BOOTSTRAP_SERVERS"
@@ -273,17 +273,17 @@ verify_strimzi_and_kafka() {
         echo_success "Kafka configuration verified"
         return 0
     fi
-    
+
     # Determine which namespace to check
     local check_namespace="${KAFKA_NAMESPACE:-kafka}"
-    
+
     # Check if Strimzi operator exists
     local strimzi_found=false
     local strimzi_ns=""
-    
+
     # Look for Strimzi operator in any namespace
     strimzi_ns=$(kubectl get pods -A -l name=strimzi-cluster-operator -o jsonpath='{.items[0].metadata.namespace}' 2>/dev/null || echo "")
-    
+
     if [ -n "$strimzi_ns" ]; then
         echo_success "Found Strimzi operator in namespace: $strimzi_ns"
         strimzi_found=true
@@ -303,7 +303,7 @@ verify_strimzi_and_kafka() {
         echo_info ""
         return 1
     fi
-    
+
     # Check if Kafka cluster exists
     if ! kubectl get kafka -n "$check_namespace" >/dev/null 2>&1; then
         echo_error "No Kafka cluster found in namespace: $check_namespace"
@@ -316,18 +316,18 @@ verify_strimzi_and_kafka() {
         echo_info ""
         return 1
     fi
-    
+
     # Get Kafka cluster details
     local kafka_cluster=$(kubectl get kafka -n "$check_namespace" -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
     if [ -n "$kafka_cluster" ]; then
         echo_success "Found Kafka cluster: $kafka_cluster in namespace: $check_namespace"
-        
+
         # Check Kafka status
         local kafka_ready=$(kubectl get kafka "$kafka_cluster" -n "$check_namespace" -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null || echo "False")
         if [ "$kafka_ready" != "True" ]; then
             echo_warning "Kafka cluster is not ready yet. Installation may fail if Kafka is not fully operational."
         fi
-        
+
         # Import Kafka bootstrap servers if available from deploy-strimzi.sh output
         if [ -f /tmp/kafka-bootstrap-servers.env ]; then
             source /tmp/kafka-bootstrap-servers.env
@@ -342,7 +342,7 @@ verify_strimzi_and_kafka() {
             echo_info "Auto-detected Kafka bootstrap servers: $bootstrap_servers"
         fi
     fi
-    
+
     echo_success "Strimzi and Kafka verification completed"
     return 0
 }
@@ -568,7 +568,7 @@ deploy_helm_chart() {
     else
         echo_info "JWT authentication disabled (non-OpenShift platform)"
     fi
-    
+
     # Add additional Helm arguments passed to the script
     if [ ${#HELM_EXTRA_ARGS[@]} -gt 0 ]; then
         echo_info "Adding additional Helm arguments: ${HELM_EXTRA_ARGS[*]}"
@@ -1090,14 +1090,14 @@ cleanup() {
     cleanup_downloaded_chart
 }
 
-# Function to detect RH SSO/Keycloak installation (OpenShift only)
-detect_rhsso_keycloak() {
-    echo_info "Detecting RH SSO/Keycloak installation..."
+# Function to detect RHBK (Red Hat Build of Keycloak) - OpenShift only
+detect_keycloak() {
+    echo_info "Detecting RHBK (Red Hat Build of Keycloak)..."
 
-    # RH SSO is only available on OpenShift clusters
+    # RHBK is only available on OpenShift clusters
     if [ "$PLATFORM" != "openshift" ]; then
-        echo_info "Skipping RH SSO detection - not an OpenShift cluster"
-        echo_info "RH SSO/Keycloak is only supported on OpenShift platforms"
+        echo_info "Skipping RHBK detection - not an OpenShift cluster"
+        echo_info "RHBK is only supported on OpenShift platforms"
         export KEYCLOAK_FOUND="false"
         export KEYCLOAK_NAMESPACE=""
         export KEYCLOAK_URL=""
@@ -1108,43 +1108,49 @@ detect_rhsso_keycloak() {
     local keycloak_namespace=""
     local keycloak_url=""
 
-    # Method 1: Look for Keycloak Custom Resources (preferred)
-    echo_info "Checking for Keycloak Custom Resources..."
-    if kubectl get keycloaks.keycloak.org -A >/dev/null 2>&1; then
-        local keycloak_cr=$(kubectl get keycloaks.keycloak.org -A -o jsonpath='{.items[0]}' 2>/dev/null)
+    # Method 1: Look for RHBK Keycloak Custom Resources (k8s.keycloak.org/v2alpha1)
+    echo_info "Checking for RHBK Keycloak CRs (k8s.keycloak.org/v2alpha1)..."
+    if kubectl get keycloaks.k8s.keycloak.org -A >/dev/null 2>&1; then
+        local keycloak_cr=$(kubectl get keycloaks.k8s.keycloak.org -A -o jsonpath='{.items[0]}' 2>/dev/null)
         if [ -n "$keycloak_cr" ]; then
             keycloak_namespace=$(echo "$keycloak_cr" | jq -r '.metadata.namespace' 2>/dev/null)
-            keycloak_url=$(echo "$keycloak_cr" | jq -r '.status.externalURL // empty' 2>/dev/null)
+            keycloak_url=$(echo "$keycloak_cr" | jq -r '.status.hostname // empty' 2>/dev/null)
             keycloak_found=true
-            echo_success "Found Keycloak CR in namespace: $keycloak_namespace"
+            echo_success "Found RHBK Keycloak CR in namespace: $keycloak_namespace"
             if [ -n "$keycloak_url" ]; then
+                keycloak_url="https://$keycloak_url"
                 echo_info "Keycloak URL: $keycloak_url"
             fi
         fi
     fi
 
-    # Method 2: Look for common RH SSO/Keycloak namespaces
+    # Method 2: Look for common RHBK namespaces
     if [ "$keycloak_found" = false ]; then
-        echo_info "Checking for RH SSO/Keycloak namespaces..."
-        for ns in rhsso sso keycloak keycloak-system; do
+        echo_info "Checking for RHBK namespaces..."
+        for ns in keycloak keycloak-system; do
             if kubectl get namespace "$ns" >/dev/null 2>&1; then
-                echo_info "Found potential Keycloak namespace: $ns"
+                echo_info "Found potential RHBK namespace: $ns"
                 # Check for Keycloak services in this namespace
-                local keycloak_service=$(kubectl get service -n "$ns" -l "app.kubernetes.io/name=keycloak" -o name 2>/dev/null | head -1)
+                local keycloak_service=$(kubectl get service -n "$ns" -l "app=keycloak" -o name 2>/dev/null | head -1)
                 if [ -n "$keycloak_service" ]; then
                     keycloak_namespace="$ns"
                     keycloak_found=true
-                    echo_success "Confirmed Keycloak service in namespace: $ns"
+                    echo_success "Confirmed RHBK service in namespace: $ns"
                     break
                 fi
             fi
         done
     fi
 
-    # Method 3: OpenShift Route detection (if on OpenShift)
-    if [ "$keycloak_found" = true ] && [ "$PLATFORM" = "openshift" ] && [ -z "$keycloak_url" ]; then
+    # Method 3: OpenShift Route detection
+    if [ "$keycloak_found" = true ] && [ -z "$keycloak_url" ]; then
         echo_info "Detecting Keycloak route in OpenShift..."
-        keycloak_url=$(kubectl get route -n "$keycloak_namespace" -o jsonpath='{.items[?(@.spec.to.name=="keycloak")].spec.host}' 2>/dev/null | head -1)
+        # Check for route named 'keycloak' (RHBK standard)
+        keycloak_url=$(kubectl get route keycloak -n "$keycloak_namespace" -o jsonpath='{.spec.host}' 2>/dev/null)
+        if [ -z "$keycloak_url" ]; then
+            # Fallback to searching for any keycloak-related route
+            keycloak_url=$(kubectl get route -n "$keycloak_namespace" -o jsonpath='{.items[?(@.metadata.name~="keycloak")].spec.host}' 2>/dev/null | head -1)
+        fi
         if [ -n "$keycloak_url" ]; then
             keycloak_url="https://$keycloak_url"
             echo_info "Detected Keycloak route: $keycloak_url"
@@ -1155,20 +1161,46 @@ detect_rhsso_keycloak() {
     export KEYCLOAK_FOUND="$keycloak_found"
     export KEYCLOAK_NAMESPACE="$keycloak_namespace"
     export KEYCLOAK_URL="$keycloak_url"
+    export KEYCLOAK_API_VERSION="k8s.keycloak.org/v2alpha1"
 
     if [ "$keycloak_found" = true ]; then
-        echo_success "RH SSO/Keycloak detected successfully"
+        echo_success "RHBK detected successfully"
+        echo_info "  API Version: k8s.keycloak.org/v2alpha1"
         echo_info "  Namespace: $keycloak_namespace"
         echo_info "  URL: ${keycloak_url:-"(auto-detect during deployment)"}"
         return 0
     else
-        echo_warning "RH SSO/Keycloak not detected in OpenShift cluster"
+        echo_warning "RHBK not detected in OpenShift cluster"
         echo_info "JWT authentication will be disabled"
-        echo_info "To enable JWT auth, install RH SSO operator or deploy Keycloak"
+        echo_info "To enable JWT auth, deploy RHBK using:"
+        echo_info "  ./deploy-rhbk.sh"
         return 1
     fi
 }
 
+# Function to verify Keycloak client secret exists
+# NOTE: Simplified - deploy-rhbk.sh now handles secret creation automatically
+# This function only verifies the secret exists
+verify_keycloak_client_secret() {
+    local client_id="${1:-cost-management-operator}"
+
+    if [ -z "$KEYCLOAK_NAMESPACE" ]; then
+        echo_warning "Keycloak namespace not set, skipping client secret verification"
+        return 1
+    fi
+
+    # Check if secret exists
+    local secret_name="keycloak-client-secret-$client_id"
+    if kubectl get secret "$secret_name" -n "$KEYCLOAK_NAMESPACE" >/dev/null 2>&1; then
+        echo_success "✓ Client secret exists: $secret_name"
+        return 0
+    else
+        echo_warning "Client secret not found: $secret_name"
+        echo_info "  Run deploy-rhbk.sh to automatically create the client secret"
+        echo_info "  The bulletproof deployment script handles secret extraction automatically"
+        return 1
+    fi
+}
 
 # Function to setup JWT authentication based on platform
 setup_jwt_authentication() {
@@ -1179,19 +1211,25 @@ setup_jwt_authentication() {
         export JWT_AUTH_ENABLED="true"
         echo_info "JWT authentication: Enabled (OpenShift platform)"
         echo_info "  JWT Method: Envoy native JWT filter"
-        echo_info "  Requires: Keycloak/RH SSO deployed"
+        echo_info "  Requires: RHBK (Red Hat Build of Keycloak) deployed"
 
-        # Detect Keycloak URL for configuration
-        if detect_rhsso_keycloak; then
-            echo_info "  Keycloak: $KEYCLOAK_NAMESPACE namespace"
+        # Detect RHBK for configuration
+        if detect_keycloak; then
+            echo_info "  RHBK Namespace: $KEYCLOAK_NAMESPACE"
+            echo_info "  RHBK API: $KEYCLOAK_API_VERSION"
+
+            # Verify client secret exists (created by deploy-rhbk.sh)
+            echo_info "Verifying Keycloak client secret exists..."
+            verify_keycloak_client_secret "cost-management-operator" || \
+                echo_warning "Client secret not found. Run ./deploy-rhbk.sh to create it."
         else
-            echo_warning "Keycloak not detected - ensure it's deployed before using JWT authentication"
+            echo_warning "RHBK not detected - ensure it's deployed before using JWT authentication"
         fi
     else
         export JWT_AUTH_ENABLED="false"
         echo_info "JWT authentication: Disabled (non-OpenShift platform)"
         echo_info "  Platform: $PLATFORM"
-        echo_info "  Note: JWT auth with RH SSO/Keycloak is only supported on OpenShift"
+        echo_info "  Note: JWT auth with RHBK is only supported on OpenShift"
     fi
 
     return 0
@@ -1200,11 +1238,11 @@ setup_jwt_authentication() {
 # Function to set platform-specific configurations
 set_platform_config() {
     local platform="$1"
-    
+
     case "$platform" in
         "openshift")
             echo_info "Using OpenShift configuration (auto-detected)"
-            
+
             # Use openshift-values.yaml if no custom values file is specified
             if [ -z "$VALUES_FILE" ]; then
                 local openshift_values="$SCRIPT_DIR/../openshift-values.yaml"
@@ -1224,18 +1262,18 @@ set_platform_config() {
             else
                 echo_info "Using custom values file: $VALUES_FILE"
             fi
-            
+
             export KAFKA_ENVIRONMENT="ocp"
             ;;
-            
+
         "kubernetes")
             echo_info "Using Kubernetes configuration (auto-detected)"
             echo_info "Using base values.yaml (optimized for Kubernetes/KIND)"
-            
+
             # No additional overrides needed - base values.yaml is Kubernetes-optimized
             export KAFKA_ENVIRONMENT="dev"
             ;;
-            
+
         *)
             echo_error "Unknown platform: $platform"
             return 1
@@ -1247,7 +1285,7 @@ set_platform_config() {
 main() {
     # Process additional arguments
     HELM_EXTRA_ARGS=()
-    
+
     while [ $# -gt 0 ]; do
         case "$1" in
             --set|--set-string|--set-file|--set-json)
@@ -1281,7 +1319,7 @@ main() {
 
     # Setup JWT authentication prerequisites (if applicable)
     setup_jwt_authentication
-    
+
     # Set platform-specific configuration based on auto-detection
     if ! set_platform_config "$PLATFORM"; then
         exit 1
@@ -1393,7 +1431,7 @@ case "${1:-}" in
         echo "  Before running this installation, ensure you have:"
         echo "  1. Strimzi operator and Kafka cluster deployed (run ./deploy-strimzi.sh)"
         echo "     OR provide KAFKA_BOOTSTRAP_SERVERS for existing Kafka"
-        echo "  2. For OpenShift with JWT auth: RHSSO/Keycloak (optional, run ./deploy-rhsso.sh)"
+        echo "  2. For OpenShift with JWT auth: RHBK (optional, run ./deploy-rhbk.sh)"
         echo ""
         echo "Commands:"
         echo "  (none)              - Install ROS-OCP Helm chart"

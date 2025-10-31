@@ -40,5 +40,3 @@ spec:
     - protocol: TCP
       port: 8083  # OIDC server (if enabled)
 {{- end }}
-
-

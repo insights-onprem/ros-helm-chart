@@ -150,69 +150,23 @@ jobs:
           kubectl get services -n $NAMESPACE
           kubectl get ingress -n $NAMESPACE
 
-      - name: Wait for services to stabilize and verify authentication
+      - name: Wait for ingress routes to propagate
         run: |
-          echo "Waiting for services to stabilize..."
-          sleep 60
+          echo "Waiting for nginx ingress controller to propagate route configuration..."
+          echo "This wait is necessary because:"
+          echo "  - Ingress controller watches for new Ingress resources and pod readiness"
+          echo "  - It needs time to update internal routing tables"
+          echo "  - Complex routes (like '/' prefix) take longer than simple exact matches"
+          echo "  - Typical propagation time: 30-60 seconds"
+          sleep 45
+          echo "✅ Ingress routes should now be propagated"
 
-          # Kubernetes authentication verification (1.24+ compatible)
-          echo "=== Kubernetes Authentication Setup ==="
-          
-          # Check if service account exists
-          if kubectl get serviceaccount insights-ros-ingress -n ${{ env.NAMESPACE }} >/dev/null 2>&1; then
-            echo "✅ insights-ros-ingress service account found"
-            
-            # Create service account token using modern TokenRequest API (Kubernetes 1.24+)
-            echo "Creating service account token using TokenRequest API..."
-            if TOKEN=$(kubectl create token insights-ros-ingress -n ${{ env.NAMESPACE }} --duration=3600s 2>/dev/null); then
-              if [ -n "$TOKEN" ] && [ ${#TOKEN} -gt 50 ]; then
-                echo "✅ Service account token created successfully (length: ${#TOKEN})"
-                echo "✅ Modern Kubernetes authentication is working"
-                
-                # Test token validation
-                if kubectl auth can-i get pods --as=system:serviceaccount:${{ env.NAMESPACE }}:insights-ros-ingress -n ${{ env.NAMESPACE }} >/dev/null 2>&1; then
-                  echo "✅ Service account has proper RBAC permissions"
-                else
-                  echo "⚠️  Service account may have limited RBAC permissions (this is normal for testing)"
-                fi
-              else
-                echo "❌ Service account token is invalid or too short"
-                exit 1
-              fi
-            else
-              echo "❌ Failed to create service account token"
-              echo "This may indicate RBAC or API server issues"
-              exit 1
-            fi
-          else
-            echo "❌ insights-ros-ingress service account not found"
-            echo "Available service accounts:"
-            kubectl get serviceaccounts -n ${{ env.NAMESPACE }} || true
-            exit 1
-          fi
-
-          # Legacy authentication check (for reference, but not required)
-          echo "=== Legacy Authentication Check (for reference) ==="
-          if [ -f "/tmp/dev-kubeconfig" ]; then
-            echo "ℹ️  Legacy kubeconfig found at /tmp/dev-kubeconfig"
-          else
-            echo "ℹ️  Legacy kubeconfig not found (this is expected with modern setup)"
-          fi
-          
-          # Legacy token secret check (not required in Kubernetes 1.24+)
-          if kubectl get secret insights-ros-ingress-token -n ${{ env.NAMESPACE }} >/dev/null 2>&1; then
-            echo "ℹ️  Legacy token secret found (unusual in Kubernetes 1.24+)"
-          else
-            echo "ℹ️  Legacy token secret not found (this is expected in Kubernetes 1.24+)"
-          fi
-
-          echo "=== Pod Readiness Check ==="
-          # Wait for all pods to be in Running state
-          timeout 600 bash -c "until kubectl wait --for=condition=ready pod -l 'app.kubernetes.io/instance=${{ env.HELM_RELEASE_NAME }}' -n ${{ env.NAMESPACE }} --timeout=30s; do echo 'Waiting for pods...'; sleep 10; done"
-
-          # Additional wait for services to fully initialize
-          echo "All pods ready, waiting additional 30 seconds for service initialization..."
-          sleep 30
+      - name: Run dataflow test
+        run: |
+          echo "Running Kubernetes dataflow test..."
+          cd scripts
+          chmod +x test-k8s-dataflow.sh
+          ./test-k8s-dataflow.sh
 
       - name: Show cluster status on failure
         if: failure()

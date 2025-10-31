@@ -713,13 +713,14 @@ Keycloak Dynamic Configuration Helpers
 */}}
 
 {{/*
-Detect if Keycloak is installed in the cluster
-This helper looks for actual Keycloak Custom Resources from the RH SSO operator
+Detect if Keycloak (RHBK) is installed in the cluster
+This helper looks for Keycloak Custom Resources from the RHBK operator
+Only supports: k8s.keycloak.org/v2alpha1 (RHBK v22+)
 */}}
 {{- define "ros-ocp.keycloak.isInstalled" -}}
 {{- $keycloakFound := false -}}
-{{- /* Look for Keycloak CRs across all namespaces */ -}}
-{{- $keycloaks := lookup "keycloak.org/v1alpha1" "Keycloak" "" "" -}}
+{{- /* Look for RHBK v2alpha1 CRs */ -}}
+{{- $keycloaks := lookup "k8s.keycloak.org/v2alpha1" "Keycloak" "" "" -}}
 {{- if $keycloaks -}}
   {{- if $keycloaks.items -}}
     {{- if gt (len $keycloaks.items) 0 -}}
@@ -727,7 +728,7 @@ This helper looks for actual Keycloak Custom Resources from the RH SSO operator
     {{- end -}}
   {{- end -}}
 {{- end -}}
-{{- /* Fallback: try legacy namespace pattern matching if no CRs found */ -}}
+{{- /* Fallback: try namespace pattern matching if no CRs found */ -}}
 {{- if not $keycloakFound -}}
   {{- range $ns := (lookup "v1" "Namespace" "" "").items -}}
     {{- if or (contains "keycloak" $ns.metadata.name) (contains "rhsso" $ns.metadata.name) -}}
@@ -741,6 +742,7 @@ This helper looks for actual Keycloak Custom Resources from the RH SSO operator
 
 {{/*
 Find Keycloak namespace by looking for Keycloak CRs first, then fallback to patterns
+Only supports RHBK (v2alpha1) operator
 */}}
 {{- define "ros-ocp.keycloak.namespace" -}}
 {{- $keycloakNs := "" -}}
@@ -748,8 +750,8 @@ Find Keycloak namespace by looking for Keycloak CRs first, then fallback to patt
 {{- if .Values.jwt_auth.keycloak.namespace -}}
   {{- $keycloakNs = .Values.jwt_auth.keycloak.namespace -}}
 {{- else -}}
-  {{- /* Second priority: try to find namespace from Keycloak CRs */ -}}
-  {{- $keycloaks := lookup "keycloak.org/v1alpha1" "Keycloak" "" "" -}}
+  {{- /* Second priority: try to find namespace from RHBK v2alpha1 CRs */ -}}
+  {{- $keycloaks := lookup "k8s.keycloak.org/v2alpha1" "Keycloak" "" "" -}}
   {{- if $keycloaks -}}
     {{- if $keycloaks.items -}}
       {{- if gt (len $keycloaks.items) 0 -}}
@@ -772,29 +774,19 @@ Find Keycloak namespace by looking for Keycloak CRs first, then fallback to patt
 
 {{/*
 Find Keycloak service name by looking at Keycloak CRs first, then service discovery
+Only supports RHBK (v2alpha1) operator
 */}}
 {{- define "ros-ocp.keycloak.serviceName" -}}
 {{- $keycloakSvc := "" -}}
 {{- $ns := include "ros-ocp.keycloak.namespace" . -}}
 {{- if $ns -}}
-  {{- /* First, try to get service name from Keycloak CR status */ -}}
-  {{- $keycloaks := lookup "keycloak.org/v1alpha1" "Keycloak" $ns "" -}}
+  {{- /* Try RHBK v2alpha1 CR */ -}}
+  {{- $keycloaks := lookup "k8s.keycloak.org/v2alpha1" "Keycloak" $ns "" -}}
   {{- if $keycloaks -}}
     {{- if $keycloaks.items -}}
       {{- if gt (len $keycloaks.items) 0 -}}
         {{- $keycloak := index $keycloaks.items 0 -}}
-        {{- /* Try to get service name from CR metadata or status */ -}}
-        {{- if $keycloak.status -}}
-          {{- if $keycloak.status.externalURL -}}
-            {{- /* Extract service name from external URL or use CR name */ -}}
-            {{- $keycloakSvc = $keycloak.metadata.name -}}
-          {{- else -}}
-            {{- $keycloakSvc = $keycloak.metadata.name -}}
-          {{- end -}}
-        {{- else -}}
-          {{- /* Use CR name as service name */ -}}
-          {{- $keycloakSvc = $keycloak.metadata.name -}}
-        {{- end -}}
+        {{- $keycloakSvc = printf "%s-service" $keycloak.metadata.name -}}
       {{- end -}}
     {{- end -}}
   {{- end -}}
@@ -814,20 +806,21 @@ Find Keycloak service name by looking at Keycloak CRs first, then service discov
 {{/*
 Get Keycloak route URL (OpenShift) or construct service URL (Kubernetes)
 First try to get URL from Keycloak CR status, then fallback to route/ingress discovery
+Only supports RHBK (v2alpha1) operator
 */}}
 {{- define "ros-ocp.keycloak.url" -}}
 {{- $keycloakUrl := "" -}}
 {{- $ns := include "ros-ocp.keycloak.namespace" . -}}
 {{- if $ns -}}
-  {{- /* First, try to get URL from Keycloak CR status */ -}}
-  {{- $keycloaks := lookup "keycloak.org/v1alpha1" "Keycloak" $ns "" -}}
+  {{- /* Try RHBK v2alpha1 CR status */ -}}
+  {{- $keycloaks := lookup "k8s.keycloak.org/v2alpha1" "Keycloak" $ns "" -}}
   {{- if $keycloaks -}}
     {{- if $keycloaks.items -}}
       {{- if gt (len $keycloaks.items) 0 -}}
         {{- $keycloak := index $keycloaks.items 0 -}}
         {{- if $keycloak.status -}}
-          {{- if $keycloak.status.externalURL -}}
-            {{- $keycloakUrl = $keycloak.status.externalURL -}}
+          {{- if $keycloak.status.hostname -}}
+            {{- $keycloakUrl = printf "https://%s" $keycloak.status.hostname -}}
           {{- end -}}
         {{- end -}}
       {{- end -}}
@@ -893,10 +886,11 @@ Get complete Keycloak issuer URL with realm
   {{- $baseUrl = include "ros-ocp.keycloak.url" . -}}
 {{- end -}}
 {{- if $baseUrl -}}
-  {{- printf "%s/auth/realms/%s" $baseUrl .Values.jwt_auth.keycloak.realm -}}
+  {{- /* RHBK v22+ uses /realms/ without /auth prefix */ -}}
+  {{- printf "%s/realms/%s" $baseUrl .Values.jwt_auth.keycloak.realm -}}
 {{- else -}}
   {{- /* No Keycloak URL found - fail with helpful message (OpenShift only) */ -}}
-  {{- fail "Keycloak URL not found on OpenShift cluster. JWT authentication requires Keycloak/RHSSO. Please either:\n  1. Set jwt_auth.keycloak.url in values.yaml, or\n  2. Ensure Keycloak is deployed with a Route in a common namespace (rhsso, keycloak, sso), or\n  3. Deploy Keycloak using the provided scripts/deploy-rhsso.sh script\n\nNote: JWT authentication is only supported on OpenShift. For KIND/Kubernetes, authentication is automatically disabled." -}}
+  {{- fail "Keycloak URL not found on OpenShift cluster. JWT authentication requires Red Hat Build of Keycloak. Please either:\n  1. Set jwt_auth.keycloak.url in values.yaml, or\n  2. Ensure Keycloak is deployed with a Route in a common namespace (keycloak, rhsso, sso), or\n  3. Deploy Keycloak using the provided scripts/deploy-rhbk.sh script\n\nNote: JWT authentication is only supported on OpenShift. For KIND/Kubernetes, authentication is automatically disabled." -}}
 {{- end -}}
 {{- end }}
 
@@ -909,10 +903,14 @@ Get Keycloak JWKS URL
 
 {{/*
 Get Keycloak CR information for debugging
+Only supports RHBK (v2alpha1) operator
 */}}
 {{- define "ros-ocp.keycloak.crInfo" -}}
 {{- $info := dict -}}
-{{- $keycloaks := lookup "keycloak.org/v1alpha1" "Keycloak" "" "" -}}
+{{- $_ := set $info "apiVersion" "k8s.keycloak.org/v2alpha1" -}}
+{{- $_ := set $info "operator" "RHBK" -}}
+{{- /* Look for RHBK v2alpha1 CRs */ -}}
+{{- $keycloaks := lookup "k8s.keycloak.org/v2alpha1" "Keycloak" "" "" -}}
 {{- if $keycloaks -}}
   {{- if $keycloaks.items -}}
     {{- if gt (len $keycloaks.items) 0 -}}
@@ -921,23 +919,24 @@ Get Keycloak CR information for debugging
       {{- $_ := set $info "name" $keycloak.metadata.name -}}
       {{- $_ := set $info "namespace" $keycloak.metadata.namespace -}}
       {{- if $keycloak.status -}}
-        {{- $_ := set $info "ready" ($keycloak.status.ready | default false) -}}
-        {{- if $keycloak.status.externalURL -}}
-          {{- $_ := set $info "externalURL" $keycloak.status.externalURL -}}
+        {{- if $keycloak.status.conditions -}}
+          {{- $_ := set $info "ready" (eq (index $keycloak.status.conditions 0).status "True") -}}
         {{- end -}}
-        {{- if $keycloak.status.internalURL -}}
-          {{- $_ := set $info "internalURL" $keycloak.status.internalURL -}}
+        {{- if $keycloak.status.hostname -}}
+          {{- $_ := set $info "externalURL" (printf "https://%s" $keycloak.status.hostname) -}}
         {{- end -}}
       {{- end -}}
       {{- if $keycloak.spec -}}
-        {{- if $keycloak.spec.instances -}}
-          {{- $_ := set $info "instances" $keycloak.spec.instances -}}
-        {{- end -}}
-        {{- if $keycloak.spec.externalAccess -}}
-          {{- $_ := set $info "externalAccess" $keycloak.spec.externalAccess.enabled -}}
+        {{- $_ := set $info "instances" $keycloak.spec.instances -}}
+        {{- if $keycloak.spec.ingress -}}
+          {{- $_ := set $info "ingressEnabled" (default false $keycloak.spec.ingress.enabled) -}}
         {{- end -}}
       {{- end -}}
+    {{- else -}}
+      {{- $_ := set $info "found" false -}}
     {{- end -}}
+  {{- else -}}
+    {{- $_ := set $info "found" false -}}
   {{- end -}}
 {{- else -}}
   {{- $_ := set $info "found" false -}}

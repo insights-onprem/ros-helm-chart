@@ -143,7 +143,7 @@ ingress:
     batchSize: 16384
     retries: 3
   # Authentication configuration
-  # Note: Authentication is only available on OpenShift with Keycloak/RHSSO.
+  # Note: Authentication is only available on OpenShift with Keycloak (RHBK).
   # On vanilla Kubernetes/KIND, authentication is automatically disabled regardless of this setting.
   auth:
     enabled: true   # Only applies to OpenShift deployments
@@ -395,9 +395,9 @@ monitoring:
   scrapeInterval: 30s  # Prometheus scrape interval for metrics collection
 
 # JWT Authentication configuration
-# JWT authentication with Keycloak/RHSSO using Envoy's native JWT filter
-# - OpenShift: Automatically enabled (requires Keycloak/RH SSO to be deployed)
-# - KIND/Vanilla K8s: Automatically disabled (Keycloak not available)
+# JWT authentication with RHBK using Envoy's native JWT filter
+# - OpenShift: Automatically enabled (requires RHBK to be deployed)
+# - KIND/Vanilla K8s: Automatically disabled (RHBK not available)
 # Platform detection is automatic via Helm's capability detection.
 #
 # Architecture: Envoy sidecar validates JWT tokens inline using native jwt_authn filter
@@ -424,22 +424,25 @@ jwt_auth:
         memory: 128Mi
 
   # Keycloak configuration for JWT validation
-  # NOTE: JWT authentication is ONLY supported on OpenShift with Keycloak/RHSSO.
+  # NOTE: JWT authentication is ONLY supported on OpenShift with Keycloak.
   # On vanilla Kubernetes/KIND, JWT authentication is automatically disabled.
+  #
+  # Supported operator:
+  #   - Red Hat Build of Keycloak (RHBK) v22+ - k8s.keycloak.org/v2alpha1
   keycloak:
     # Keycloak URL - leave empty for automatic runtime discovery (OpenShift only)
     #
     # Runtime Discovery on OpenShift (when url is empty):
-    #   1. Searches for Keycloak Route in common namespaces (rhsso, keycloak, sso)
+    #   1. Searches for Keycloak Route in common namespaces (keycloak, keycloak-system)
     #   2. Falls back to Keycloak Service discovery (cluster-local)
     #   3. Fails with helpful message if not found
     #
     # Override only if using custom/external Keycloak instance on OpenShift
-    url: ""  # e.g., "https://keycloak-rhsso.apps.example.com"
+    url: ""  # e.g., "https://keycloak-keycloak.apps.example.com"
 
     # Keycloak namespace - leave empty for automatic discovery
     # Set this if Keycloak is deployed in a custom namespace that doesn't match
-    # the standard patterns (rhsso, keycloak, sso)
+    # the standard patterns (keycloak, keycloak-system)
     namespace: ""  # e.g., "my-auth-namespace"
 
     # Keycloak service port for internal cluster-local discovery fallback

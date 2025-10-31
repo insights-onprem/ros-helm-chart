@@ -5,7 +5,7 @@
 # for the ROS-OCP platform with support for both Kubernetes/KIND and OpenShift
 #
 # PREREQUISITE: This script should be run BEFORE install-helm-chart.sh
-# 
+#
 # Typical workflow:
 #   1. ./deploy-strimzi.sh         # Deploy Kafka infrastructure (this script)
 #   2. ./install-helm-chart.sh     # Deploy ROS-OCP application
@@ -65,9 +65,14 @@ detect_platform() {
     if kubectl get routes.route.openshift.io >/dev/null 2>&1; then
         echo_success "Detected OpenShift platform"
         PLATFORM="openshift"
-        # Set OpenShift defaults if not overridden
+        # Auto-detect default storage class if not provided
         if [ -z "$STORAGE_CLASS" ]; then
-            STORAGE_CLASS="odf-storagecluster-ceph-rbd"
+            STORAGE_CLASS=$(kubectl get storageclass -o jsonpath='{.items[?(@.metadata.annotations.storageclass\.kubernetes\.io/is-default-class=="true")].metadata.name}' 2>/dev/null | awk '{print $1}')
+            if [ -n "$STORAGE_CLASS" ]; then
+                echo_info "Auto-detected default storage class: $STORAGE_CLASS"
+            else
+                echo_warning "No default storage class found. Storage class must be explicitly set."
+            fi
         fi
         if [ "$KAFKA_ENVIRONMENT" = "dev" ]; then
             KAFKA_ENVIRONMENT="ocp"
@@ -75,6 +80,13 @@ detect_platform() {
     else
         echo_success "Detected Kubernetes platform"
         PLATFORM="kubernetes"
+        # Auto-detect default storage class if not provided
+        if [ -z "$STORAGE_CLASS" ]; then
+            STORAGE_CLASS=$(kubectl get storageclass -o jsonpath='{.items[?(@.metadata.annotations.storageclass\.kubernetes\.io/is-default-class=="true")].metadata.name}' 2>/dev/null | awk '{print $1}')
+            if [ -n "$STORAGE_CLASS" ]; then
+                echo_info "Auto-detected default storage class: $STORAGE_CLASS"
+            fi
+        fi
     fi
 }
 
@@ -139,22 +151,22 @@ create_namespace() {
 # Function to verify existing Strimzi operator
 verify_existing_strimzi() {
     local strimzi_namespace="$1"
-    
+
     echo_info "Verifying existing Strimzi operator in namespace: $strimzi_namespace"
-    
+
     # Check if Strimzi operator exists
     if ! kubectl get pods -n "$strimzi_namespace" -l name=strimzi-cluster-operator >/dev/null 2>&1; then
         echo_error "Strimzi operator not found in namespace: $strimzi_namespace"
         return 1
     fi
-    
+
     # Check Strimzi operator version compatibility
     echo_info "Checking Strimzi operator version compatibility..."
     local strimzi_pod=$(kubectl get pods -n "$strimzi_namespace" -l name=strimzi-cluster-operator -o jsonpath='{.items[0].metadata.name}')
     if [ -n "$strimzi_pod" ]; then
         local strimzi_image=$(kubectl get pod -n "$strimzi_namespace" "$strimzi_pod" -o jsonpath='{.spec.containers[0].image}')
         echo_info "Found Strimzi operator image: $strimzi_image"
-        
+
         # Check if it's a compatible version (should contain 0.45.x for Kafka 3.8.0 support)
         if [[ "$strimzi_image" =~ :0\.45\. ]] || [[ "$strimzi_image" =~ :0\.44\. ]] || [[ "$strimzi_image" =~ :0\.43\. ]]; then
             echo_success "Strimzi operator version is compatible with Kafka 3.8.0"
@@ -166,29 +178,29 @@ verify_existing_strimzi() {
             return 1
         fi
     fi
-    
+
     return 0
 }
 
 # Function to verify existing Kafka cluster
 verify_existing_kafka() {
     local kafka_namespace="$1"
-    
+
     echo_info "Verifying existing Kafka cluster in namespace: $kafka_namespace"
-    
+
     # Check if Kafka cluster exists
     if ! kubectl get kafka -n "$kafka_namespace" >/dev/null 2>&1; then
         echo_error "Kafka cluster not found in namespace: $kafka_namespace"
         return 1
     fi
-    
+
     # Check Kafka cluster version
     echo_info "Checking Kafka cluster version compatibility..."
     local kafka_cluster=$(kubectl get kafka -n "$kafka_namespace" -o jsonpath='{.items[0].metadata.name}')
     if [ -n "$kafka_cluster" ]; then
         local kafka_version=$(kubectl get kafka -n "$kafka_namespace" "$kafka_cluster" -o jsonpath='{.spec.kafka.version}')
         echo_info "Found Kafka cluster version: $kafka_version"
-        
+
         # Check if it's Kafka 3.8.0
         if [ "$kafka_version" = "3.8.0" ]; then
             echo_success "Kafka cluster version is compatible: $kafka_version"
@@ -200,7 +212,7 @@ verify_existing_kafka() {
             return 1
         fi
     fi
-    
+
     return 0
 }
 
@@ -209,13 +221,13 @@ install_strimzi_operator() {
     echo_header "INSTALLING STRIMZI OPERATOR"
 
     local target_namespace="$KAFKA_NAMESPACE"
-    
+
     # Check if there's already a Strimzi operator we can reuse
     local existing_strimzi_ns=$(kubectl get pods -A -l name=strimzi-cluster-operator -o jsonpath='{.items[0].metadata.namespace}' 2>/dev/null || echo "")
-    
+
     if [ -n "$existing_strimzi_ns" ]; then
         echo_info "Found existing Strimzi operator in namespace: $existing_strimzi_ns"
-        
+
         # Verify if it's compatible
         if verify_existing_strimzi "$existing_strimzi_ns" 2>/dev/null; then
             echo_success "Existing Strimzi operator is compatible, reusing it"
@@ -229,15 +241,15 @@ install_strimzi_operator() {
             exit 1
         fi
     fi
-    
+
     echo_info "No existing Strimzi operator found, installing fresh"
-    
+
     # Add Strimzi Helm repo
     echo_info "Adding Strimzi Helm repository..."
     helm repo add strimzi https://strimzi.io/charts/
     helm repo update
     echo_success "✓ Strimzi Helm repository added"
-    
+
     # Install Strimzi operator using Helm
     echo_info "Installing Strimzi operator version $STRIMZI_VERSION (supports Kafka $KAFKA_VERSION)..."
     helm upgrade --install strimzi-kafka-operator strimzi/strimzi-kafka-operator \
@@ -245,14 +257,14 @@ install_strimzi_operator() {
         --version "$STRIMZI_VERSION" \
         --wait \
         --timeout=600s
-    
+
     echo_success "✓ Strimzi operator installed"
-    
+
     # Wait for Strimzi operator pod to be ready
     echo_info "Waiting for Strimzi operator to be ready..."
     local timeout=300
     local elapsed=0
-    
+
     while [ $elapsed -lt $timeout ]; do
         if kubectl get pod -n "$target_namespace" -l name=strimzi-cluster-operator >/dev/null 2>&1; then
             if kubectl wait --for=condition=ready pod -l name=strimzi-cluster-operator -n "$target_namespace" --timeout=10s >/dev/null 2>&1; then
@@ -260,20 +272,20 @@ install_strimzi_operator() {
                 break
             fi
         fi
-        
+
         if [ $((elapsed % 30)) -eq 0 ]; then
             echo_info "Still waiting for Strimzi operator... (${elapsed}s elapsed)"
         fi
-        
+
         sleep 5
         elapsed=$((elapsed + 5))
     done
-    
+
     if [ $elapsed -ge $timeout ]; then
         echo_error "Timeout waiting for Strimzi operator to be ready"
         exit 1
     fi
-    
+
     # Wait for CRDs to be established
     echo_info "Waiting for Strimzi CRDs to be ready..."
     kubectl wait --for condition=established --timeout=60s crd/kafkas.kafka.strimzi.io 2>/dev/null || true
@@ -290,7 +302,7 @@ deploy_kafka_cluster() {
         echo_warning "Kafka cluster '$KAFKA_CLUSTER_NAME' already exists in namespace '$KAFKA_NAMESPACE'"
         return 0
     fi
-    
+
     # Set environment-specific Kafka configuration
     local kafka_replicas=1
     local kafka_storage_size="10Gi"
@@ -299,7 +311,7 @@ deploy_kafka_cluster() {
     local zookeeper_storage_size="5Gi"
     local zookeeper_storage_class=""
     local tls_enabled="false"
-    
+
     case "$KAFKA_ENVIRONMENT" in
         "ocp"|"openshift")
             kafka_replicas=3
@@ -314,7 +326,7 @@ deploy_kafka_cluster() {
             # Use defaults
             ;;
     esac
-    
+
     echo_info "Creating Kafka cluster with configuration:"
     echo_info "  Name: $KAFKA_CLUSTER_NAME"
     echo_info "  Version: $KAFKA_VERSION"
@@ -329,7 +341,7 @@ deploy_kafka_cluster() {
         echo_info "  ZooKeeper storage class: $zookeeper_storage_class"
     fi
     echo_info "  TLS enabled: $tls_enabled"
-    
+
     # Build Kafka YAML
     local kafka_yaml="apiVersion: kafka.strimzi.io/v1beta2
 kind: Kafka
@@ -345,7 +357,7 @@ spec:
         port: 9092
         type: internal
         tls: false"
-    
+
     # Add TLS listener if enabled
     if [ "$tls_enabled" = "true" ]; then
         kafka_yaml="$kafka_yaml
@@ -354,20 +366,20 @@ spec:
         type: internal
         tls: true"
     fi
-    
+
     # Add storage configuration
     kafka_yaml="$kafka_yaml
     storage:
       type: persistent-claim
       size: $kafka_storage_size
       deleteClaim: false"
-    
+
     # Add storage class if specified
     if [ -n "$kafka_storage_class" ]; then
         kafka_yaml="$kafka_yaml
       class: $kafka_storage_class"
     fi
-    
+
     # Add Kafka configuration
     kafka_yaml="$kafka_yaml
     config:
@@ -385,43 +397,43 @@ spec:
       type: persistent-claim
       size: $zookeeper_storage_size
       deleteClaim: false"
-    
+
     # Add Zookeeper storage class if specified
     if [ -n "$zookeeper_storage_class" ]; then
         kafka_yaml="$kafka_yaml
       class: $zookeeper_storage_class"
     fi
-    
+
     # Add entity operator
     kafka_yaml="$kafka_yaml
   entityOperator:
     topicOperator: {}
     userOperator: {}"
-    
+
     # Apply Kafka cluster
     if echo "$kafka_yaml" | kubectl apply -f -; then
         echo_success "✓ Kafka cluster '$KAFKA_CLUSTER_NAME' created in namespace '$KAFKA_NAMESPACE'"
-        
+
         # Wait for Kafka cluster to be ready
         echo_info "Waiting for Kafka cluster to be ready (this may take several minutes)..."
         local timeout=600
         local elapsed=0
-        
+
         while [ $elapsed -lt $timeout ]; do
             local status=$(kubectl get kafka "$KAFKA_CLUSTER_NAME" -n "$KAFKA_NAMESPACE" -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null || echo "False")
             if [ "$status" = "True" ]; then
                 echo_success "✓ Kafka cluster is ready"
                 return 0
             fi
-            
+
             if [ $((elapsed % 60)) -eq 0 ]; then
                 echo_info "Still waiting for Kafka cluster... (${elapsed}s elapsed)"
             fi
-            
+
             sleep 10
             elapsed=$((elapsed + 10))
         done
-        
+
         if [ $elapsed -ge $timeout ]; then
             echo_error "Timeout waiting for Kafka cluster to be ready"
             exit 1
@@ -435,14 +447,14 @@ spec:
 # Function to create Kafka topics
 create_kafka_topics() {
     echo_header "CREATING KAFKA TOPICS"
-    
+
     local replication_factor=1
     if [ "$KAFKA_ENVIRONMENT" = "ocp" ] || [ "$KAFKA_ENVIRONMENT" = "openshift" ]; then
         replication_factor=3
     fi
-    
+
     echo_info "Creating Kafka topics with replication factor: $replication_factor"
-    
+
     # Required topics (topic_name:partitions:replication_factor)
     local required_topics=(
         "hccm.ros.events:3:$replication_factor"
@@ -451,18 +463,18 @@ create_kafka_topics() {
         "platform.upload.announce:3:$replication_factor"
         "platform.payload-status:3:$replication_factor"
     )
-    
+
     for topic_config in "${required_topics[@]}"; do
         IFS=':' read -r topic_name partitions replication_factor <<< "$topic_config"
-        
+
         # Check if topic already exists
         if kubectl get kafkatopic "$topic_name" -n "$KAFKA_NAMESPACE" >/dev/null 2>&1; then
             echo_info "Topic '$topic_name' already exists, skipping"
             continue
         fi
-        
+
         echo_info "Creating topic: $topic_name (partitions: $partitions, replication: $replication_factor)"
-        
+
         # Create topic YAML
         cat <<EOF | kubectl apply -f -
 apiVersion: kafka.strimzi.io/v1beta2
@@ -479,14 +491,14 @@ spec:
     retention.ms: "604800000"
     segment.ms: "86400000"
 EOF
-        
+
         if [ $? -eq 0 ]; then
             echo_success "✓ Topic '$topic_name' created"
         else
             echo_warning "Failed to create topic '$topic_name'"
         fi
     done
-    
+
     echo_success "Kafka topics creation completed"
 }
 
@@ -565,10 +577,10 @@ display_summary() {
 
     # Get Kafka bootstrap servers from deployed cluster
     local kafka_bootstrap_servers=""
-    
+
     # Query from Kafka resource status (most reliable - Strimzi populates this)
     local bootstrap_address=$(kubectl get kafka "$KAFKA_CLUSTER_NAME" -n "$KAFKA_NAMESPACE" -o jsonpath='{.status.listeners[?(@.name=="plain")].bootstrapServers}' 2>/dev/null || echo "")
-    
+
     if [ -n "$bootstrap_address" ]; then
         # Use address from Kafka status (includes correct DNS suffix for the cluster)
         kafka_bootstrap_servers="$bootstrap_address"
@@ -685,7 +697,7 @@ cleanup_deployment() {
 # Main execution function
 main() {
     echo_header "STRIMZI/KAFKA DEPLOYMENT SCRIPT"
-    
+
     # Handle existing Kafka on cluster (bootstrap servers provided by user)
     if [ -n "$KAFKA_BOOTSTRAP_SERVERS" ]; then
         echo_info "Using existing Kafka cluster (provided bootstrap servers)"
@@ -694,7 +706,7 @@ main() {
         echo_info "  Bootstrap Servers: $KAFKA_BOOTSTRAP_SERVERS"
         echo_info "  Deployment: Skipped (using external Kafka)"
         echo ""
-        
+
         # Export bootstrap servers for parent scripts
         echo "export KAFKA_BOOTSTRAP_SERVERS=\"$KAFKA_BOOTSTRAP_SERVERS\"" > /tmp/kafka-bootstrap-servers.env
         echo_success "✓ Kafka bootstrap servers exported to /tmp/kafka-bootstrap-servers.env"
@@ -702,7 +714,7 @@ main() {
         echo_success "Kafka configuration completed successfully!"
         exit 0
     fi
-    
+
     echo_info "This script will deploy Strimzi operator and Kafka cluster"
     echo_info "Deployment Configuration:"
     echo_info "  Namespace: $KAFKA_NAMESPACE"
@@ -720,7 +732,7 @@ main() {
 
     # Execute deployment steps
     check_prerequisites
-    
+
     # Handle existing infrastructure if specified
     if [ -n "$STRIMZI_NAMESPACE" ]; then
         echo_info "Using existing Strimzi operator in namespace: $STRIMZI_NAMESPACE"
