@@ -84,15 +84,20 @@ ros-helm-chart/
 - **ROS-OCP Housekeeper**: Maintenance tasks and data cleanup
 - **Kruize Autotune**: Optimization recommendation engine (direct authentication, protected by network policies)
 - **Sources API**: Source management and integration (middleware-based authentication for protected endpoints, unauthenticated metadata endpoints for internal use)
+- **UI**: Frontend web interface with OAuth proxy sidecar (OpenShift only, OAuth-protected)
 - **Redis**: Caching layer for performance
 
 **Security Architecture (OpenShift)**:
 - **Ingress Authentication**: Envoy sidecar with JWT validation (Keycloak) for external uploads
 - **Backend Authentication**: Envoy sidecar with OAuth2 TokenReview (Authorino) for OpenShift Console UI access
+- **UI Authentication**: OAuth proxy sidecar with OpenShift OAuth for frontend access
 - **Network Policies**: Restrict direct access to backend services (Kruize, Sources API) while allowing Prometheus metrics scraping
 - **Multi-tenancy**: `org_id` and `account_number` from authentication enable data isolation across organizations and accounts
 
-**See [JWT Authentication Guide](docs/native-jwt-authentication.md) and [OAuth2 TokenReview Guide](docs/oauth2-tokenreview-authentication.md) for detailed architecture**
+**Authentication Guides:**
+- [UI OAuth Authentication](docs/ui-oauth-authentication.md) - Frontend OAuth proxy setup
+- [OAuth2 TokenReview Guide](docs/oauth2-tokenreview-authentication.md) - Backend API authentication
+- [JWT Authentication Guide](docs/native-jwt-authentication.md) - Ingress JWT validation
 
 ## ⚙️ Configuration
 
@@ -122,6 +127,11 @@ Services accessible via OpenShift Routes:
 ```bash
 oc get routes -n ros-ocp
 ```
+
+**UI Access (OpenShift Only):**
+- The UI is protected by OpenShift OAuth and accessible via its dedicated route
+- Users will be redirected to OpenShift login if not authenticated
+- After login, the OAuth proxy validates the session and forwards requests to the UI
 
 **See [Platform Guide](docs/platform-guide.md) for platform-specific details**
 

@@ -1,0 +1,22 @@
+{{- if eq (include "ros-ocp.isOpenShift" .) "true" }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "ros-ocp.fullname" . }}-ui
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ros-ocp.labels" . | nindent 4 }}
+    app.kubernetes.io/component: ui
+    app.kubernetes.io/name: ui
+  annotations:
+    service.beta.openshift.io/serving-cert-secret-name: {{ include "ros-ocp.fullname" . }}-ui-tls
+spec:
+  ports:
+    - port: 8443
+      targetPort: https
+      name: https
+  selector:
+    {{- include "ros-ocp.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: ui
+    app.kubernetes.io/name: ui
+{{- end }}

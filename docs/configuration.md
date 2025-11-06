@@ -433,6 +433,35 @@ ingress:
   logging:
     level: "info"
     format: "json"
+
+# UI (OpenShift only - OAuth protected frontend)
+ui:
+  replicaCount: 1
+  oauth-proxy:
+    image:
+      repository: quay.io/openshift/origin-oauth-proxy
+      pullPolicy: IfNotPresent
+      tag: "latest"
+    resources:
+      limits:
+        cpu: "100m"
+        memory: "128Mi"
+      requests:
+        cpu: "50m"
+        memory: "64Mi"
+  app:
+    image:
+      repository: openshift/hello-openshift
+      tag: "latest"
+      pullPolicy: IfNotPresent
+    port: 8080
+    resources:
+      limits:
+        cpu: "100m"
+        memory: "128Mi"
+      requests:
+        cpu: "50m"
+        memory: "64Mi"
 ```
 
 ### Environment-Specific Values Files
