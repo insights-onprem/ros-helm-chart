@@ -1,0 +1,24 @@
+{{- if and .Values.ui (eq (include "cost-onprem.platform.isOpenShift" .) "true") }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "cost-onprem.fullname" . }}-ui
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "cost-onprem.labels" . | nindent 4 }}
+    app.kubernetes.io/component: ui
+  annotations:
+    service.beta.openshift.io/serving-cert-secret-name: {{ include "cost-onprem.fullname" . }}-ui-tls
+spec:
+  ports:
+    - port: 8443
+      targetPort: https
+      name: https
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: {{ include "cost-onprem.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: ui
+  type: ClusterIP
+{{- end }}
+

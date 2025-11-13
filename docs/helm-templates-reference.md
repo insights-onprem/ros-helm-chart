@@ -247,6 +247,325 @@ Detects if running on OpenShift.
 
 ---
 
+## UI Templates
+
+### Overview
+
+The UI component provides a web-based user interface for Cost Management On-Premise, available exclusively on OpenShift platforms. It uses an OAuth proxy sidecar for OpenShift authentication and serves the Koku UI micro-frontend application.
+
+**Platform Availability:**
+- ✅ **OpenShift**: Fully supported with OAuth proxy authentication
+- ❌ **Kubernetes/KIND**: Not available (requires OpenShift OAuth infrastructure)
+
+**Key Features:**
+- OAuth proxy sidecar for seamless OpenShift authentication
+- Automatic TLS certificate management via OpenShift service serving certificates
+- Cookie-based session management
+- Integration with ROS API backend
+
+### `cost-onprem/templates/ui/deployment.yaml`
+
+**Purpose**: Deployment for UI component with OAuth proxy sidecar and application container.
+
+**Architecture**:
+```mermaid
+graph TB
+    subgraph Pod["UI Pod"]
+        direction TB
+        OAuthProxy["OAuth Proxy Container<br/>(Port 8443)<br/><br/>• OpenShift OAuth<br/>• Session management<br/>• TLS termination"]
+        App["App Container<br/>(Port 8080)<br/><br/>• Koku UI MFE<br/>• React application<br/>• API proxy"]
+        
+        OAuthProxy -->|"http://localhost:8080"| App
+    end
+    
+    Route["OpenShift Route<br/>(reencrypt TLS)"]
+    Service["UI Service<br/>(Port 8443)"]
+    
+    Route -->|"HTTPS"| Service
+    Service -->|"HTTPS"| OAuthProxy
+    
+    style OAuthProxy fill:#fff59d,stroke:#333,stroke-width:2px,color:#000
+    style App fill:#a5d6a7,stroke:#333,stroke-width:2px,color:#000
+    style Route fill:#90caf9,stroke:#333,stroke-width:2px,color:#000
+    style Service fill:#ce93d8,stroke:#333,stroke-width:2px,color:#000
+```
+
+**Container Configuration**:
+
+#### OAuth Proxy Container
+- **Image**: `registry.redhat.io/openshift4/ose-oauth-proxy-rhel9:latest`
+- **Port**: `8443` (HTTPS)
+- **Purpose**: Handles OpenShift OAuth authentication flow
+
+**Key Arguments**:
+```yaml
+- --https-address=:8443
+- --openshift-service-account={{ include "cost-onprem.fullname" . }}-ui
+- --cookie-secret-file=/etc/proxy/secrets/session-secret
+- --tls-cert=/etc/tls/private/tls.crt
+- --tls-key=/etc/tls/private/tls.key
+- --upstream=http://localhost:{{ .Values.ui.app.port }}
+- --pass-host-header=false
+- --skip-provider-button
+- --skip-auth-preflight
+- --pass-access-token
+```
+
+**Health Probes**:
+- **Liveness**: `GET /oauth/healthz` on port `8443` (HTTPS)
+- **Readiness**: `GET /oauth/healthz` on port `8443` (HTTPS)
+
+**Volume Mounts**:
+- `proxy-tls`: TLS certificate and key from OpenShift service serving certificate secret
+- `cookie-secret`: Session secret for cookie encryption
+
+#### App Container
+- **Image**: `quay.io/insights-onprem/koku-ui-mfe-on-prem:0.0.14`
+- **Port**: `8080` (HTTP, internal only)
+- **Purpose**: Serves the Koku UI micro-frontend application
+
+**Environment Variables**:
+| Variable | Value | Description |
+|----------|-------|-------------|
+| `API_PROXY_URL` | `http://{{ include "cost-onprem.fullname" . }}-ros-api:{{ .Values.ros.api.port }}` | Backend API endpoint for UI requests |
+
+**Health Probes**:
+- **Liveness**: `GET /` on port `8080`
+- **Readiness**: `GET /` on port `8080`
+
+**Resource Configuration**:
+```yaml
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 100m
+    memory: 128Mi
+```
+
+**Deployment Conditions**:
+- Only deployed when `ui` values are defined AND platform is OpenShift
+- Template check: `{{- if and .Values.ui (eq (include "cost-onprem.platform.isOpenShift" .) "true") }}`
+
+---
+
+### `cost-onprem/templates/ui/service.yaml`
+
+**Purpose**: Kubernetes Service exposing the UI OAuth proxy endpoint.
+
+**Port Configuration**:
+```yaml
+ports:
+  - port: 8443
+    targetPort: https
+    name: https
+    protocol: TCP
+```
+
+**Service Type**: `ClusterIP` (internal access only, exposed via OpenShift Route)
+
+**OpenShift Integration**:
+- **Annotation**: `service.beta.openshift.io/serving-cert-secret-name: {{ include "cost-onprem.fullname" . }}-ui-tls`
+- **Purpose**: Automatically provisions TLS certificate secret for OAuth proxy
+- **Certificate**: Managed by OpenShift, automatically rotated
+
+**Service Discovery**:
+- **Selector**: `app.kubernetes.io/component: ui`
+- **Access**: Internal cluster access only (via Route)
+
+---
+
+### `cost-onprem/templates/ui/secret.yaml`
+
+**Purpose**: Secret for OAuth proxy cookie encryption.
+
+**Secret Type**: `Opaque`
+
+**Data**:
+```yaml
+data:
+  session-secret: <base64-encoded-random-32-char-string>
+```
+
+**Key Features**:
+- **Generation**: Random 32-character alphanumeric string, base64-encoded
+- **Persistence**: Uses Helm `lookup` function to preserve existing secret on upgrades
+- **Purpose**: Encrypts OAuth session cookies
+
+**Template Logic**:
+```yaml
+{{- $secret := (lookup "v1" "Secret" .Release.Namespace (printf "%s-ui-cookie-secret" (include "cost-onprem.fullname" .))) -}}
+session-secret: {{ if $secret }}{{ index $secret.data "session-secret" }}{{ else }}{{ randAlphaNum 32 | b64enc }}{{ end }}
+```
+
+This ensures:
+- ✅ New installations: Generates random secret
+- ✅ Upgrades: Preserves existing secret (no session invalidation)
+
+---
+
+### `cost-onprem/templates/ui/serviceaccount.yaml`
+
+**Purpose**: ServiceAccount with OAuth redirect reference for OpenShift authentication.
+
+**Key Annotation**:
+```yaml
+annotations:
+  serviceaccounts.openshift.io/oauth-redirectreference.primary: '{"kind":"OAuthRedirectReference","apiVersion":"v1","reference":{"kind":"Route","name":"{{ include "cost-onprem.fullname" . }}-ui"}}'
+```
+
+**Purpose**: 
+- Registers the UI Route as a valid OAuth redirect target
+- Enables OpenShift OAuth flow to redirect back to UI after authentication
+- Required for OAuth proxy to function correctly
+
+**OAuth Flow**:
+1. User accesses UI Route
+2. OAuth proxy redirects to OpenShift OAuth server
+3. User authenticates with OpenShift credentials
+4. OAuth server redirects back to UI Route (validated via redirect reference)
+5. OAuth proxy receives token, creates session cookie
+6. User accesses UI application
+
+---
+
+### `cost-onprem/templates/ingress/routes.yaml` (UI Route)
+
+**Purpose**: OpenShift Route exposing the UI service externally.
+
+**Route Configuration**:
+```yaml
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: {{ include "cost-onprem.fullname" . }}-ui
+spec:
+  to:
+    kind: Service
+    name: {{ include "cost-onprem.fullname" . }}-ui
+  port:
+    targetPort: https
+  tls:
+    termination: reencrypt
+    insecureEdgeTerminationPolicy: Redirect
+```
+
+**TLS Configuration**:
+- **Termination**: `reencrypt` (TLS passthrough to OAuth proxy)
+- **Insecure Policy**: `Redirect` (HTTP → HTTPS redirect)
+- **Certificate**: Managed by OpenShift service serving certificates
+
+**Host Configuration**:
+- Uses `serviceRoute.hosts[0].host` from values (empty = cluster default domain)
+- Example: `cost-onprem-ui-cost-onprem.apps.cluster.example.com`
+
+**Access Pattern**:
+```bash
+# Get UI route URL
+oc get route cost-onprem-ui -n cost-onprem -o jsonpath='{.spec.host}'
+
+# Access UI
+https://cost-onprem-ui-cost-onprem.apps.cluster.example.com
+```
+
+---
+
+### UI Configuration Values
+
+**Helm Values Structure**:
+```yaml
+ui:
+  replicaCount: 1
+
+  oauthProxy:
+    image:
+      repository: registry.redhat.io/openshift4/ose-oauth-proxy-rhel9
+      tag: "latest"
+      pullPolicy: IfNotPresent
+    resources:
+      limits:
+        cpu: "100m"
+        memory: "128Mi"
+      requests:
+        cpu: "50m"
+        memory: "64Mi"
+
+  app:
+    image:
+      repository: quay.io/insights-onprem/koku-ui-mfe-on-prem
+      tag: "0.0.14"
+      pullPolicy: IfNotPresent
+    port: 8080
+    resources:
+      limits:
+        cpu: "100m"
+        memory: "128Mi"
+      requests:
+        cpu: "50m"
+        memory: "64Mi"
+```
+
+**Configuration Options**:
+
+| Value Path | Description | Default |
+|------------|-------------|---------|
+| `ui.replicaCount` | Number of UI pod replicas | `1` |
+| `ui.oauthProxy.image.repository` | OAuth proxy container image | `registry.redhat.io/openshift4/ose-oauth-proxy-rhel9` |
+| `ui.oauthProxy.image.tag` | OAuth proxy image tag | `latest` |
+| `ui.oauthProxy.resources` | OAuth proxy resource limits/requests | See defaults above |
+| `ui.app.image.repository` | UI application container image | `quay.io/insights-onprem/koku-ui-mfe-on-prem` |
+| `ui.app.image.tag` | UI application image tag | `0.0.14` |
+| `ui.app.port` | Internal application port | `8080` |
+| `ui.app.resources` | Application resource limits/requests | See defaults above |
+
+---
+
+### UI Deployment Flow
+
+1. **Pre-Deployment Checks**:
+   - Platform detection: Must be OpenShift
+   - Values validation: `ui` section must be defined
+
+2. **Resource Creation Order**:
+   - ServiceAccount (with OAuth redirect reference)
+   - Secret (cookie secret)
+   - Service (triggers OpenShift serving certificate creation)
+   - Deployment (OAuth proxy + app containers)
+   - Route (external access)
+
+3. **Post-Deployment**:
+   - OAuth proxy authenticates with OpenShift
+   - TLS certificates provisioned automatically
+   - Route becomes accessible
+   - UI application connects to ROS API backend
+
+---
+
+### Troubleshooting UI Deployment
+
+**Common Issues**:
+
+1. **UI not deployed on Kubernetes**:
+   - ✅ **Expected**: UI only available on OpenShift
+   - Check: `kubectl get deployment -n cost-onprem | grep ui` (should be empty on K8s)
+
+2. **OAuth redirect errors**:
+   - Check ServiceAccount annotation: `oc get sa cost-onprem-ui -n cost-onprem -o yaml`
+   - Verify Route name matches redirect reference
+
+3. **TLS certificate issues**:
+   - Check service annotation: `oc get svc cost-onprem-ui -n cost-onprem -o yaml`
+   - Verify secret exists: `oc get secret cost-onprem-ui-tls -n cost-onprem`
+
+4. **UI cannot connect to API**:
+   - Check `API_PROXY_URL` environment variable in app container
+   - Verify ROS API service is accessible: `oc get svc cost-onprem-ros-api -n cost-onprem`
+
+**For detailed OAuth authentication troubleshooting, see [UI OAuth Authentication Guide](ui-oauth-authentication.md)**
+
+---
+
 ## Security & Certificate Templates
 
 ### `cost-onprem/templates/ca-configmap.yaml`

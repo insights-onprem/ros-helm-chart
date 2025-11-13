@@ -1,0 +1,107 @@
+{{- if and .Values.ui (eq (include "cost-onprem.platform.isOpenShift" .) "true") }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "cost-onprem.fullname" . }}-ui
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "cost-onprem.labels" . | nindent 4 }}
+    app.kubernetes.io/component: ui
+spec:
+  replicas: {{ .Values.ui.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "cost-onprem.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: ui
+  template:
+    metadata:
+      labels:
+        {{- include "cost-onprem.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: ui
+    spec:
+      serviceAccountName: {{ include "cost-onprem.fullname" . }}-ui
+      containers:
+      - name: oauth-proxy
+        image: "{{ .Values.ui.oauthProxy.image.repository }}:{{ .Values.ui.oauthProxy.image.tag }}"
+        imagePullPolicy: {{ .Values.ui.oauthProxy.image.pullPolicy | default .Values.global.pullPolicy }}
+        ports:
+        - name: https
+          containerPort: 8443
+        args:
+        - --https-address=:8443
+        - --openshift-service-account={{ include "cost-onprem.fullname" . }}-ui
+        - --cookie-secret-file=/etc/proxy/secrets/session-secret
+        - --tls-cert=/etc/tls/private/tls.crt
+        - --tls-key=/etc/tls/private/tls.key
+        - --upstream=http://localhost:{{ .Values.ui.app.port }}
+        - --pass-host-header=false
+        - --skip-provider-button
+        - --skip-auth-preflight
+        - --pass-access-token
+        livenessProbe:
+          httpGet:
+            path: /oauth/healthz
+            port: https
+            scheme: HTTPS
+          initialDelaySeconds: {{ .Values.probes.initialDelaySeconds }}
+          periodSeconds: {{ .Values.probes.periodSeconds }}
+          timeoutSeconds: {{ .Values.probes.timeoutSeconds }}
+          failureThreshold: {{ .Values.probes.failureThreshold }}
+        readinessProbe:
+          httpGet:
+            path: /oauth/healthz
+            port: https
+            scheme: HTTPS
+          initialDelaySeconds: {{ .Values.probes.initialDelaySeconds }}
+          periodSeconds: {{ .Values.probes.periodSeconds }}
+          timeoutSeconds: {{ .Values.probes.timeoutSeconds }}
+          failureThreshold: {{ .Values.probes.failureThreshold }}
+        resources:
+          {{- toYaml .Values.ui.oauthProxy.resources | nindent 12 }}
+        volumeMounts:
+        - name: proxy-tls
+          mountPath: /etc/tls/private
+          readOnly: true
+        - name: cookie-secret
+          mountPath: /etc/proxy/secrets
+          readOnly: true
+      - name: app
+        image: "{{ .Values.ui.app.image.repository }}:{{ .Values.ui.app.image.tag }}"
+        imagePullPolicy: {{ .Values.ui.app.image.pullPolicy | default .Values.global.pullPolicy }}
+        ports:
+        - name: http
+          containerPort: {{ .Values.ui.app.port }}
+        env:
+        - name: API_PROXY_URL
+          value: {{ printf "http://%s-ros-api:%v" (include "cost-onprem.fullname" .) .Values.ros.api.port }}
+        livenessProbe:
+          httpGet:
+            path: /
+            port: http
+          initialDelaySeconds: {{ .Values.probes.initialDelaySeconds }}
+          periodSeconds: {{ .Values.probes.periodSeconds }}
+          timeoutSeconds: {{ .Values.probes.timeoutSeconds }}
+          failureThreshold: {{ .Values.probes.failureThreshold }}
+        readinessProbe:
+          httpGet:
+            path: /
+            port: http
+          initialDelaySeconds: {{ .Values.probes.initialDelaySeconds }}
+          periodSeconds: {{ .Values.probes.periodSeconds }}
+          timeoutSeconds: {{ .Values.probes.timeoutSeconds }}
+          failureThreshold: {{ .Values.probes.failureThreshold }}
+        resources:
+          {{- toYaml .Values.ui.app.resources | nindent 12 }}
+      volumes:
+      - name: proxy-tls
+        secret:
+          secretName: {{ include "cost-onprem.fullname" . }}-ui-tls
+      - name: cookie-secret
+        secret:
+          secretName: {{ include "cost-onprem.fullname" . }}-ui-cookie-secret
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}
+

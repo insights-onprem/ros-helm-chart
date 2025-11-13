@@ -6,6 +6,7 @@ This file contains only the essential routes required for external access:
 
 1. Main route (/) - ROS API status and recommendations endpoints
 2. Ingress route (/api/ingress) - File upload and version check
+3. UI route (/) - User interface
 
 INTERNAL-ONLY SERVICES (no routes, accessed via network policies):
 - Kruize - Accessed only by internal services (processor, poller, housekeeper)
@@ -78,7 +79,31 @@ spec:
   tls:
     termination: {{ .Values.serviceRoute.tls.termination }}
     {{- if .Values.serviceRoute.tls.insecureEdgeTerminationPolicy }}
-    insecureEdgeTerminationPolicy: {{ .Values.serviceRoute.tls.insecureEdgeTerminationPolicy }}
-    {{- end }}
+      insecureEdgeTerminationPolicy: {{ .Values.serviceRoute.tls.insecureEdgeTerminationPolicy }}
+      {{- end }}
   {{- end }}
+---
+# UI route
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: {{ include "cost-onprem.fullname" . }}-ui
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "cost-onprem.labels" . | nindent 4 }}
+    app.kubernetes.io/component: ui
+spec:
+  {{- with (index .Values.serviceRoute.hosts 0) }}
+  {{- if .host }}
+  host: {{ .host | quote }}
+  {{- end }}
+  {{- end }}
+  to:
+    kind: Service
+    name: {{ include "cost-onprem.fullname" . }}-ui
+  port:
+    targetPort: https
+  tls:
+    termination: reencrypt
+    insecureEdgeTerminationPolicy: Redirect
 {{- end }}

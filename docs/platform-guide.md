@@ -213,11 +213,13 @@ graph TB
 
     Routes -->|"cost-onprem-main-cost-onprem.apps..."| Main["ROS Main Service"]
     Routes -->|"cost-onprem-ingress-cost-onprem.apps..."| Ingress["Ingress Service"]
+    Routes -->|"cost-onprem-ui-cost-onprem.apps..."| UI["UI Service<br/>(OAuth Proxy + App)"]
     Routes -->|"cost-onprem-kruize-cost-onprem.apps..."| Kruize["Kruize Service"]
 
     style Router fill:#e57373,stroke:#333,stroke-width:2px,color:#000
     style Main fill:#a5d6a7,stroke:#333,stroke-width:2px,color:#000
     style Ingress fill:#a5d6a7,stroke:#333,stroke-width:2px,color:#000
+    style UI fill:#a5d6a7,stroke:#333,stroke-width:2px,color:#000
     style Kruize fill:#a5d6a7,stroke:#333,stroke-width:2px,color:#000
 ```
 
@@ -249,9 +251,10 @@ spec:
 oc get routes -n cost-onprem
 
 # Example routes
-https://cost-onprem-main-cost-onprem.apps.cluster.com
-https://cost-onprem-ingress-cost-onprem.apps.cluster.com
-https://cost-onprem-kruize-cost-onprem.apps.cluster.com
+https://cost-onprem-main-cost-onprem.apps.cluster.com      # ROS API
+https://cost-onprem-ingress-cost-onprem.apps.cluster.com   # Ingress API (file upload)
+https://cost-onprem-ui-cost-onprem.apps.cluster.com        # UI (web interface)
+https://cost-onprem-kruize-cost-onprem.apps.cluster.com    # Kruize API
 ```
 
 ### Storage
@@ -326,6 +329,52 @@ serviceRoute:
 - `edge`: TLS termination at router
 - `passthrough`: TLS to pod
 - `reencrypt`: TLS at router and pod
+
+### UI Component (OpenShift Only)
+
+**Availability:**
+- ✅ **OpenShift**: Fully supported with OAuth proxy authentication
+- ❌ **Kubernetes/KIND**: Not available (requires OpenShift OAuth infrastructure)
+
+**Architecture:**
+The UI component consists of two containers in a single pod:
+- **OAuth Proxy**: Handles OpenShift OAuth authentication flow (port 8443)
+- **Application**: Serves the Koku UI micro-frontend (port 8080, internal)
+
+**Access:**
+```bash
+# Get UI route
+oc get route cost-onprem-ui -n cost-onprem -o jsonpath='{.spec.host}'
+
+# Access UI (requires OpenShift authentication)
+# Browser will redirect to OpenShift login, then back to UI
+https://cost-onprem-ui-cost-onprem.apps.cluster.example.com
+```
+
+**Configuration:**
+```yaml
+ui:
+  replicaCount: 1
+  oauthProxy:
+    image:
+      repository: registry.redhat.io/openshift4/ose-oauth-proxy-rhel9
+      tag: "latest"
+  app:
+    image:
+      repository: quay.io/insights-onprem/koku-ui-mfe-on-prem
+      tag: "0.0.14"
+    port: 8080
+```
+
+**Features:**
+- Automatic TLS certificate management via OpenShift service serving certificates
+- Cookie-based session management
+- Seamless OpenShift authentication integration
+- Connects to ROS API backend for data
+
+**Documentation:**
+- **Templates**: See [Helm Templates Reference - UI Templates](helm-templates-reference.md#ui-templates) for resource definitions
+- **Authentication**: See [UI OAuth Authentication](ui-oauth-authentication.md) for OAuth proxy setup and troubleshooting
 
 ### OpenShift-Specific Values
 
