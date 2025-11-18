@@ -244,6 +244,7 @@ oc get routes -n cost-onprem
 # Example routes
 oc get route cost-onprem-main -n cost-onprem       # Main API (Cost Management On-Premise API)
 oc get route cost-onprem-ingress -n cost-onprem    # Ingress API (file upload)
+oc get route cost-onprem-ui -n cost-onprem         # UI (web interface)
 ```
 
 **Access Pattern:**
@@ -251,10 +252,14 @@ oc get route cost-onprem-ingress -n cost-onprem    # Ingress API (file upload)
 # Get route URLs
 MAIN_ROUTE=$(oc get route cost-onprem-main -n cost-onprem -o jsonpath='{.spec.host}')
 INGRESS_ROUTE=$(oc get route cost-onprem-ingress -n cost-onprem -o jsonpath='{.spec.host}')
+UI_ROUTE=$(oc get route cost-onprem-ui -n cost-onprem -o jsonpath='{.spec.host}')
 
 # Test endpoints
 curl https://$MAIN_ROUTE/status
 curl https://$INGRESS_ROUTE/api/ingress/ready
+
+# Access UI (requires OpenShift authentication)
+echo "UI available at: https://$UI_ROUTE"
 ```
 
 ### Port Forwarding (Alternative Access)
@@ -433,6 +438,35 @@ ingress:
   logging:
     level: "info"
     format: "json"
+
+# UI (OpenShift only)
+ui:
+  replicaCount: 1
+  oauthProxy:
+    image:
+      repository: registry.redhat.io/openshift4/ose-oauth-proxy-rhel9
+      tag: "latest"
+      pullPolicy: IfNotPresent
+    resources:
+      limits:
+        cpu: "100m"
+        memory: "128Mi"
+      requests:
+        cpu: "50m"
+        memory: "64Mi"
+  app:
+    image:
+      repository: quay.io/insights-onprem/koku-ui-mfe-on-prem
+      tag: "0.0.14"
+      pullPolicy: IfNotPresent
+    port: 8080
+    resources:
+      limits:
+        cpu: "100m"
+        memory: "128Mi"
+      requests:
+        cpu: "50m"
+        memory: "64Mi"
 ```
 
 ### Environment-Specific Values Files

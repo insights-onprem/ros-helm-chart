@@ -23,6 +23,7 @@ Welcome to the Resource Optimization Service (ROS) for OpenShift Container Platf
 |----------|---------|-------------|
 | **[Keycloak JWT Authentication Setup](keycloak-jwt-authentication-setup.md)** | Complete guide for setting up JWT authentication with Keycloak | Configuring authentication for production environments |
 | **[Native JWT Authentication](native-jwt-authentication.md)** | Detailed explanation of JWT authentication architecture | Understanding how JWT authentication works in Cost Management On-Premise |
+| **[UI OAuth Authentication](ui-oauth-authentication.md)** | Complete guide for UI OAuth authentication with OpenShift OAuth proxy | Understanding and troubleshooting UI authentication on OpenShift |
 | **[TLS Certificate Options](tls-certificate-options.md)** | Guide to different TLS certificate configuration scenarios | Configuring TLS for Keycloak JWKS endpoint validation |
 | **[External Keycloak Scenario](external-keycloak-scenario.md)** | Analysis and architecture for using external Keycloak | Connecting Cost Management On-Premise to Keycloak outside the cluster |
 | **[Cost Management Operator TLS Config Setup](cost-management-operator-tls-config-setup.md)** | TLS configuration for the Cost Management Metrics Operator | Setting up secure communication between operator and ROS ingress |
@@ -60,8 +61,9 @@ Welcome to the Resource Optimization Service (ROS) for OpenShift Container Platf
 ### "I'm setting up authentication"
 1. Read **[Native JWT Authentication](native-jwt-authentication.md)** to understand the architecture
 2. Follow **[Keycloak JWT Authentication Setup](keycloak-jwt-authentication-setup.md)** for step-by-step instructions
-3. Use **[TLS Certificate Options](tls-certificate-options.md)** for TLS configuration
-4. Reference **[External Keycloak Scenario](external-keycloak-scenario.md)** if using external Keycloak
+3. For UI authentication, see **[UI OAuth Authentication](ui-oauth-authentication.md)** (OpenShift only)
+4. Use **[TLS Certificate Options](tls-certificate-options.md)** for TLS configuration
+5. Reference **[External Keycloak Scenario](external-keycloak-scenario.md)** if using external Keycloak
 
 ### "I'm setting up the Cost Management Operator"
 1. Follow **[Cost Management Operator TLS Config Setup](cost-management-operator-tls-config-setup.md)**
@@ -172,6 +174,28 @@ Welcome to the Resource Optimization Service (ROS) for OpenShift Container Platf
 - TLS certificate validation
 - Service-to-service authentication
 - Network policies
+
+---
+
+#### [UI OAuth Authentication](ui-oauth-authentication.md)
+**Purpose:** Complete guide for understanding and troubleshooting UI OAuth authentication using OpenShift's native OAuth proxy.
+
+**Use when:**
+- Setting up or troubleshooting the UI component on OpenShift
+- Understanding how UI authentication works with OpenShift OAuth
+- Debugging OAuth redirect loops or authentication issues
+- Configuring TLS certificates for UI
+- Understanding session management and cookie encryption
+
+**Key topics:**
+- OAuth proxy architecture and authentication flow
+- OpenShift OAuth server integration
+- TLS certificate auto-generation via Service CA Operator
+- ServiceAccount OAuth redirect configuration
+- Session secret persistence across upgrades
+- Troubleshooting common authentication issues
+- Security considerations and best practices
+- Platform requirements (OpenShift only)
 
 ---
 
