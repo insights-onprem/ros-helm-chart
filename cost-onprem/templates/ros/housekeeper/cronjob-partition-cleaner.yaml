@@ -27,8 +27,8 @@ spec:
           {{- end }}
           containers:
           - name: ros-partition-cleaner
-            image: {{ .Values.ros.housekeeper.partitionCleaner.image.repository }}:{{ .Values.ros.housekeeper.partitionCleaner.image.tag }}
-            imagePullPolicy: {{ .Values.ros.housekeeper.partitionCleaner.image.pullPolicy | default .Values.global.pullPolicy }}
+            image: {{ .Values.ros.image.repository }}:{{ .Values.ros.image.tag }}
+            imagePullPolicy: {{ .Values.ros.image.pullPolicy | default .Values.global.pullPolicy }}
             command: ["sh"]
             args: ["-c", "./rosocp db migrate up && ./rosocp start housekeeper --partitions"]
             env:

@@ -51,6 +51,14 @@ auth:
 # ROS (Resource Optimization Service) - Top-level Service
 # -----------------------------------------------------------------------------
 ros:
+  # Unified image configuration for all ROS components
+  # All ROS services (api, processor, recommendationPoller, housekeeper, partitionCleaner)
+  # use the same image
+  image:
+    repository: quay.io/insights-onprem/ros-ocp-backend
+    tag: "latest"
+    pullPolicy: Always
+
   # Service Account
   serviceAccount:
     create: true
@@ -58,11 +66,6 @@ ros:
 
   # API Component - REST API for ROS
   api:
-    image:
-      repository: quay.io/insights-onprem/ros-ocp-backend
-      tag: "latest"
-      pullPolicy: Always
-
     port: 8000
     metricsPort: 9000
     pathPrefix: /api
@@ -76,11 +79,6 @@ ros:
 
   # Processor Component - Processes uploaded data
   processor:
-    image:
-      repository: quay.io/insights-onprem/ros-ocp-backend
-      tag: "latest"
-      pullPolicy: Always
-
     metricsPort: 9000
     logLevel: INFO
     serviceName: ros-processor
@@ -95,11 +93,6 @@ ros:
 
   # Recommendation Poller Component - Polls Kruize for recommendations
   recommendationPoller:
-    image:
-      repository: quay.io/insights-onprem/ros-ocp-backend
-      tag: "latest"
-      pullPolicy: Always
-
     metricsPort: 9000
     logLevel: INFO
     serviceName: ros-recommendation-poller
@@ -114,11 +107,6 @@ ros:
 
   # Housekeeper Component - Maintenance and cleanup tasks
   housekeeper:
-    image:
-      repository: quay.io/insights-onprem/ros-ocp-backend
-      tag: "latest"
-      pullPolicy: Always
-
     logLevel: INFO
     serviceName: ros-housekeeper-sources
 
@@ -126,10 +114,6 @@ ros:
     partitionCleaner:
       enabled: true
       schedule: "0 0 */15 * *"  # Every 15 days at midnight
-      image:
-        repository: quay.io/insights-onprem/ros-ocp-backend
-        tag: "latest"
-        pullPolicy: Always
       serviceName: ros-housekeeper-partition
       logLevel: INFO
       resources:

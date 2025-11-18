@@ -76,8 +76,8 @@ spec:
             {{- toYaml .Values.jwtAuth.envoy.resources | nindent 12 }}
         {{- end }}
         - name: ros-api
-          image: "{{ .Values.ros.api.image.repository }}:{{ .Values.ros.api.image.tag }}"
-          imagePullPolicy: {{ .Values.ros.api.image.pullPolicy | default .Values.global.pullPolicy }}
+          image: "{{ .Values.ros.image.repository }}:{{ .Values.ros.image.tag }}"
+          imagePullPolicy: {{ .Values.ros.image.pullPolicy | default .Values.global.pullPolicy }}
           securityContext:
             {{- include "cost-onprem.securityContext.nonRoot" . | nindent 12 }}
           command: ["sh", "-c"]

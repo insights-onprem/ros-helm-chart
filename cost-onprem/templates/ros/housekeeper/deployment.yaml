@@ -34,8 +34,8 @@ spec:
         {{- include "cost-onprem.initContainer.waitForSourcesApi" . | nindent 8 }}
       containers:
         - name: ros-housekeeper
-          image: "{{ .Values.ros.housekeeper.image.repository }}:{{ .Values.ros.housekeeper.image.tag }}"
-          imagePullPolicy: {{ .Values.ros.housekeeper.image.pullPolicy | default .Values.global.pullPolicy }}
+          image: "{{ .Values.ros.image.repository }}:{{ .Values.ros.image.tag }}"
+          imagePullPolicy: {{ .Values.ros.image.pullPolicy | default .Values.global.pullPolicy }}
           command: ["sh", "-c"]
           args:
             - |
